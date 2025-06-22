@@ -6,14 +6,14 @@ use xxhash_rust::xxh3::Xxh3;
 use rayon::prelude::*;
 
 #[derive(Clone, Debug)]
-pub enum HashAlgorithm {
+pub enum HashKind {
     Sha256,
     Blake3,
     XxHash3,
 }
 
 #[derive(Clone, Debug)]
-pub enum SecurityLevel {
+pub enum Security {
     Low,
     Medium,
     High,
@@ -21,39 +21,55 @@ pub enum SecurityLevel {
 }
 
 #[derive(Clone, Debug)]
-pub enum SpeedPreference {
+pub enum Speed {
     Fastest,
     Balanced,
     MostSecure,
 }
 
 #[derive(Clone, Debug)]
-pub struct AlgorithmStrategy {
-    pub security_level: SecurityLevel,
-    pub speed_preference: SpeedPreference,
+pub struct HashingPolicy {
+    pub security: Security,
+    pub speed: Speed,
     pub file_type: Option<String>,
 }
 
-impl AlgorithmStrategy {
-    pub fn new(security_level: SecurityLevel, speed_preference: SpeedPreference) -> Self {
+impl HashingPolicy {
+    pub fn new(security: Security, speed: Speed) -> Self {
         Self {
-            security_level,
-            speed_preference,
+            security,
+            speed,
             file_type: None,
         }
     }
-    
     pub fn with_file_type(mut self, file_type: String) -> Self {
         self.file_type = Some(file_type);
         self
     }
+    pub fn choose_algorithm(&self) -> HashKind {
+        match (&self.file_type, &self.security, &self.speed) {
+            (Some(ft), _, Speed::Fastest) if ft.eq_ignore_ascii_case("jpg") || ft.eq_ignore_ascii_case("jpeg") || ft.eq_ignore_ascii_case("png") || ft.eq_ignore_ascii_case("mp4") || ft.eq_ignore_ascii_case("mp3") => {
+                HashKind::XxHash3
+            }
+            (Some(ft), Security::High | Security::Maximum, _) if ft.eq_ignore_ascii_case("txt") || ft.eq_ignore_ascii_case("md") || ft.eq_ignore_ascii_case("rs") || ft.eq_ignore_ascii_case("py") => {
+                HashKind::Sha256
+            }
+            (Some(ft), _, Speed::Balanced) if ft.eq_ignore_ascii_case("zip") || ft.eq_ignore_ascii_case("tar") || ft.eq_ignore_ascii_case("gz") => {
+                HashKind::Blake3
+            }
+            (_, Security::Maximum, _) => HashKind::Sha256,
+            (_, Security::High, _) => HashKind::Blake3,
+            (_, _, Speed::Fastest) => HashKind::XxHash3,
+            _ => HashKind::Blake3,
+        }
+    }
 }
 
-pub fn hash_file(path: &str, algo: HashAlgorithm) -> io::Result<Vec<u8>> {
+pub fn hash_file(path: &str, algo: HashKind) -> io::Result<Vec<u8>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     match algo {
-        HashAlgorithm::Sha256 => {
+        HashKind::Sha256 => {
             let mut hasher = Sha256::new();
             let mut buffer = [0u8; 8192];
             loop {
@@ -63,7 +79,7 @@ pub fn hash_file(path: &str, algo: HashAlgorithm) -> io::Result<Vec<u8>> {
             }
             Ok(hasher.finalize().to_vec())
         },
-        HashAlgorithm::Blake3 => {
+        HashKind::Blake3 => {
             let mut hasher = blake3::Hasher::new();
             let mut buffer = [0u8; 8192];
             loop {
@@ -73,7 +89,7 @@ pub fn hash_file(path: &str, algo: HashAlgorithm) -> io::Result<Vec<u8>> {
             }
             Ok(hasher.finalize().as_bytes().to_vec())
         },
-        HashAlgorithm::XxHash3 => {
+        HashKind::XxHash3 => {
             let mut hasher = Xxh3::new();
             let mut buffer = [0u8; 8192];
             loop {
@@ -134,7 +150,7 @@ pub fn hash_file_xxhash3(path: &str) -> std::io::Result<Vec<u8>> {
     Ok(hasher.digest().to_le_bytes().to_vec())
 }
 
-pub fn hash_files_parallel(paths: &[&str], algo: HashAlgorithm) -> Vec<(String, Vec<u8>)> {
+pub fn hash_files_parallel(paths: &[&str], algo: HashKind) -> Vec<(String, Vec<u8>)> {
     paths.par_iter()
         .map(|path| {
             let hash = hash_file(path, algo.clone()).unwrap_or_default();
@@ -190,9 +206,9 @@ mod tests {
         write!(file, "hello world").unwrap();
         let path = file.path().to_str().unwrap();
 
-        let sha256 = hash_file(path, HashAlgorithm::Sha256).unwrap();
-        let blake3 = hash_file(path, HashAlgorithm::Blake3).unwrap();
-        let xxhash3 = hash_file(path, HashAlgorithm::XxHash3).unwrap();
+        let sha256 = hash_file(path, HashKind::Sha256).unwrap();
+        let blake3 = hash_file(path, HashKind::Blake3).unwrap();
+        let xxhash3 = hash_file(path, HashKind::XxHash3).unwrap();
 
         let expected_sha256 = vec![
             0xb9, 0x4d, 0x27, 0xb9, 0x93, 0x4d, 0x3e, 0x08,
@@ -215,7 +231,7 @@ mod tests {
         write!(file1, "hello world").unwrap();
         write!(file2, "rustacean").unwrap();
         let paths = [file1.path().to_str().unwrap(), file2.path().to_str().unwrap()];
-        let results = hash_files_parallel(&paths, HashAlgorithm::Sha256);
+        let results = hash_files_parallel(&paths, HashKind::Sha256);
         let expected1 = vec![
             0xb9, 0x4d, 0x27, 0xb9, 0x93, 0x4d, 0x3e, 0x08,
             0xa5, 0x2e, 0x52, 0xd7, 0xda, 0x7d, 0xab, 0xfa,
