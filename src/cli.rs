@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use clap::Parser;
 use crate::hashing::{hash_files_parallel, HashAlgorithm};
+use crate::safety::QuarantineManager;
 use std::env;
 use hex;
 use std::fs;
@@ -117,7 +118,7 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(root: P, exts: Option<&
 pub fn run() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: {} <sha256|blake3|xxhash3> <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH]", args[0]);
+        eprintln!("Usage: {} <sha256|blake3|xxhash3> <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH] [--safe-delete] [--commit] [--rollback]", args[0]);
         return;
     }
     let algo = match args[1].as_str() {
@@ -139,6 +140,9 @@ pub fn run() {
     let mut quarantine_dir: Option<String> = None;
     let mut json_report: Option<String> = None;
     let mut html_report: Option<String> = None;
+    let mut safe_delete = false;
+    let mut commit = false;
+    let mut rollback = false;
     for arg in &args {
         if let Some(rest) = arg.strip_prefix("--filetypes=") {
             filetypes = Some(rest.split(',').map(|s| s.trim().to_string()).collect());
@@ -174,6 +178,15 @@ pub fn run() {
         }
         if let Some(rest) = arg.strip_prefix("--html-report=") {
             html_report = Some(rest.to_string());
+        }
+        if arg == "--safe-delete" {
+            safe_delete = true;
+        }
+        if arg == "--commit" {
+            commit = true;
+        }
+        if arg == "--rollback" {
+            rollback = true;
         }
     }
     let mut files: Vec<String> = Vec::new();
@@ -226,6 +239,15 @@ pub fn run() {
     if let Some(ref hpath) = html_report {
         println!("HTML report: {}", hpath);
     }
+    if safe_delete {
+        println!("Safe delete mode: enabled");
+    }
+    if commit {
+        println!("Commit mode: enabled");
+    }
+    if rollback {
+        println!("Rollback mode: enabled");
+    }
     println!("Files to process: {}\n", files.len());
     if dry_run {
         println!("[DRY RUN] The following files would be processed:");
@@ -271,6 +293,57 @@ pub fn run() {
         pb.inc(1);
     }
     pb.finish_with_message("done");
+    
+    if safe_delete {
+        println!("\n=== Safe Delete Mode ===");
+        
+        let mut quarantine = match QuarantineManager::new() {
+            Ok(qm) => qm,
+            Err(e) => {
+                eprintln!("Failed to initialize quarantine system: {}", e);
+                return;
+            }
+        };
+        
+        let mut quarantined_count = 0;
+        for (file_path, _) in &results {
+            if let Err(e) = quarantine.quarantine_file(file_path) {
+                eprintln!("Failed to quarantine {}: {}", file_path, e);
+            } else {
+                quarantined_count += 1;
+            }
+        }
+        
+        let (total_count, total_size) = quarantine.get_quarantine_stats();
+        println!("Quarantined {} files ({:.2} MB)", total_count, 
+                 total_size as f64 / 1024.0 / 1024.0);
+        
+        if commit {
+            println!("\n=== Committing Deletions ===");
+            match quarantine.commit_deletions() {
+                Ok(deleted_count) => {
+                    println!("Successfully deleted {} files", deleted_count);
+                }
+                Err(e) => {
+                    eprintln!("Failed to commit deletions: {}", e);
+                }
+            }
+        } else if rollback {
+            println!("\n=== Rolling Back ===");
+            match quarantine.rollback() {
+                Ok(restored_count) => {
+                    println!("Successfully restored {} files", restored_count);
+                }
+                Err(e) => {
+                    eprintln!("Failed to rollback: {}", e);
+                }
+            }
+        } else {
+            println!("\n=== Quarantine Active ===");
+            println!("Files are in quarantine. Use --commit to delete or --rollback to restore.");
+        }
+    }
+    
     if let Some(ref jpath) = json_report {
         if let Ok(json) = serde_json::to_string_pretty(&report) {
             if let Err(e) = fs::write(jpath, json) {

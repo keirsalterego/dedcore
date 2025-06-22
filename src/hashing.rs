@@ -12,6 +12,43 @@ pub enum HashAlgorithm {
     XxHash3,
 }
 
+#[derive(Clone, Debug)]
+pub enum SecurityLevel {
+    Low,
+    Medium,
+    High,
+    Maximum,
+}
+
+#[derive(Clone, Debug)]
+pub enum SpeedPreference {
+    Fastest,
+    Balanced,
+    MostSecure,
+}
+
+#[derive(Clone, Debug)]
+pub struct AlgorithmStrategy {
+    pub security_level: SecurityLevel,
+    pub speed_preference: SpeedPreference,
+    pub file_type: Option<String>,
+}
+
+impl AlgorithmStrategy {
+    pub fn new(security_level: SecurityLevel, speed_preference: SpeedPreference) -> Self {
+        Self {
+            security_level,
+            speed_preference,
+            file_type: None,
+        }
+    }
+    
+    pub fn with_file_type(mut self, file_type: String) -> Self {
+        self.file_type = Some(file_type);
+        self
+    }
+}
+
 pub fn hash_file(path: &str, algo: HashAlgorithm) -> io::Result<Vec<u8>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
