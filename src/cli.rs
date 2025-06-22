@@ -25,6 +25,11 @@ pub struct App {
     #[arg(short, long)]
     pub dir: Option<PathBuf>,
 
+    #[arg(long, value_name = "SECURITY", default_value = "high", help = "Hash security: low, medium, high, maximum")]
+    pub security: String,
+
+    #[arg(long, value_name = "SPEED", default_value = "balanced", help = "Hash speed: fastest, balanced, mostsecure")]
+    pub speed: String,
 }
 
 #[derive(Serialize)]
@@ -122,8 +127,20 @@ pub fn run() {
         eprintln!("Usage: {} <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH] [--safe-delete] [--commit] [--rollback]", args[0]);
         return;
     }
-    // Default policy: high security, balanced speed
-    let default_policy = HashingPolicy::new(Security::High, Speed::Balanced);
+    let app = App::parse();
+    // Parse security and speed from CLI
+    let security = match app.security.to_lowercase().as_str() {
+        "low" => Security::Low,
+        "medium" => Security::Medium,
+        "maximum" => Security::Maximum,
+        _ => Security::High,
+    };
+    let speed = match app.speed.to_lowercase().as_str() {
+        "fastest" => Speed::Fastest,
+        "mostsecure" => Speed::MostSecure,
+        _ => Speed::Balanced,
+    };
+    let default_policy = HashingPolicy::new(security, speed);
     let mut filetypes: Option<Vec<String>> = None;
     let mut min_size: Option<u64> = None;
     let mut max_size: Option<u64> = None;
