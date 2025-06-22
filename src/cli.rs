@@ -399,3 +399,65 @@ pub fn run() {
     }
 }
 
+pub fn run_with_ui(path: String, security: String, speed: String) {
+    use crate::hashing::{HashingPolicy, Security, Speed};
+    use std::path::Path;
+    use regex::Regex;
+    let security = match security.to_lowercase().as_str() {
+        "low" => Security::Low,
+        "medium" => Security::Medium,
+        "maximum" => Security::Maximum,
+        _ => Security::High,
+    };
+    let speed = match speed.to_lowercase().as_str() {
+        "fastest" => Speed::Fastest,
+        "mostsecure" => Speed::MostSecure,
+        _ => Speed::Balanced,
+    };
+    let default_policy = HashingPolicy::new(security, speed);
+    let mut files: Vec<String> = Vec::new();
+    let scan_target;
+    if Path::new(&path).is_dir() {
+        scan_target = format!("directory: {}", path);
+        files = collect_files_recursively_with_filter(&path, None, None, None, None, None, None);
+    } else if Path::new(&path).is_file() {
+        scan_target = format!("file: {}", path);
+        files.push(path.clone());
+    } else {
+        eprintln!("No valid file or directory found for: {}", path);
+        return;
+    }
+    if files.is_empty() {
+        eprintln!("No files found to hash.");
+        return;
+    }
+    println!("\n=== DEDCORE File Hasher ===");
+    println!("Scanning {}", scan_target);
+    println!("Files to process: {}\n", files.len());
+    let pb = indicatif::ProgressBar::new(files.len() as u64);
+    pb.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+        .unwrap()
+        .progress_chars("##-"));
+    let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for f in &files {
+        let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let policy = default_policy.clone().with_file_type(ext.clone());
+        let algo = policy.choose_algorithm();
+        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
+        let _hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+        if !ext.is_empty() {
+            algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
+        }
+        pb.inc(1);
+    }
+    pb.finish_with_message("done");
+    if !algo_summary.is_empty() {
+        println!("\nAlgorithm selection summary:");
+        println!("{:<12} | {}", "File Type", "Algorithm");
+        println!("{:-<12}-+-{:-<10}", "", "");
+        for (ext, algo) in &algo_summary {
+            println!("{:<12} | {}", ext, algo);
+        }
+    }
+}
+

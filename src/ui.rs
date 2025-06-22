@@ -9,13 +9,11 @@ pub fn show_loading_screen() {
     let reset = "\x1b[0m";
     println!(r#"{cyan}
 
-      ██████╗ ███████╗██████╗  ██████╗ ██████╗ ███████╗
-      ██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔════╝
-      ██║  ██║█████╗  ██████╔╝██║   ██║██████╔╝█████╗  
-      ██║  ██║██╔══╝  ██╔══██╗██║   ██║██╔══██╗██╔══╝  
-      ██████╔╝███████╗██║  ██║╚██████╔╝██║  ██║███████╗
-      ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
-
+      ██████╗ ███████╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗
+      ██╔══██╗██╔════╝██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
+      ██║  ██║█████╗  ██║  ██║██║     ██║   ██║██████╔╝█████╗  
+      ██║  ██║██╔══╝  ██║  ██║██║     ██║   ██║██╔══██╗██╔══╝  
+      ██████╔╝███████╗██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗ v 0.1.0
               DEDCORE
 {reset}"#, cyan=cyan, reset=reset);
     println!("{yellow}dedcore: Oops, no more duplicates!{reset}\n", yellow=yellow, reset=reset);
@@ -31,6 +29,14 @@ pub fn show_loading_screen() {
     thread::sleep(Duration::from_millis(200));
 }
 
+pub fn main_menu() -> String {
+    let options = vec!["Scan for Duplicates", "Exit"];
+    Select::new("What would you like to do?", options)
+        .prompt()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|_| "Exit".to_string())
+}
+
 pub fn select_path() -> String {
     Text::new("Paste the path to a file or directory:")
         .prompt()
@@ -41,6 +47,7 @@ pub fn select_security() -> String {
     let options = vec!["high", "maximum", "medium", "low"];
     Select::new("Select security level:", options)
         .prompt()
+        .map(|s| s.to_string())
         .unwrap_or_else(|_| "high".to_string())
 }
 
@@ -48,5 +55,6 @@ pub fn select_speed() -> String {
     let options = vec!["balanced", "fastest", "mostsecure"];
     Select::new("Select speed preference:", options)
         .prompt()
+        .map(|s| s.to_string())
         .unwrap_or_else(|_| "balanced".to_string())
 } 
