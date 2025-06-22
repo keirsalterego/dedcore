@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use clap::Parser;
-use crate::hashing::{hash_files_parallel, HashAlgorithm};
+use crate::hashing::{hash_files_parallel, HashKind, HashingPolicy, Security, Speed};
 use crate::safety::QuarantineManager;
 use std::env;
 use hex;
@@ -31,6 +31,7 @@ pub struct App {
 struct FileHashReport {
     file: String,
     hash: String,
+    algorithm: String,
 }
 
 fn parse_size_arg(arg: &str) -> Option<u64> {
@@ -118,18 +119,11 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(root: P, exts: Option<&
 pub fn run() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: {} <sha256|blake3|xxhash3> <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH] [--safe-delete] [--commit] [--rollback]", args[0]);
+        eprintln!("Usage: {} <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH] [--safe-delete] [--commit] [--rollback]", args[0]);
         return;
     }
-    let algo = match args[1].as_str() {
-        "sha256" => HashAlgorithm::Sha256,
-        "blake3" => HashAlgorithm::Blake3,
-        "xxhash3" => HashAlgorithm::XxHash3,
-        _ => {
-            eprintln!("Unknown algorithm: {}", args[1]);
-            return;
-        }
-    };
+    // Default policy: high security, balanced speed
+    let default_policy = HashingPolicy::new(Security::High, Speed::Balanced);
     let mut filetypes: Option<Vec<String>> = None;
     let mut min_size: Option<u64> = None;
     let mut max_size: Option<u64> = None;
@@ -191,15 +185,15 @@ pub fn run() {
     }
     let mut files: Vec<String> = Vec::new();
     let scan_target;
-    if Path::new(&args[2]).is_dir() {
-        scan_target = format!("directory: {}", args[2]);
-        files = collect_files_recursively_with_filter(&args[2], filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
-    } else if Path::new(&args[2]).is_file() {
-        scan_target = format!("file: {}", args[2]);
-        files.push(args[2].clone());
+    if Path::new(&args[1]).is_dir() {
+        scan_target = format!("directory: {}", args[1]);
+        files = collect_files_recursively_with_filter(&args[1], filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
+    } else if Path::new(&args[1]).is_file() {
+        scan_target = format!("file: {}", args[1]);
+        files.push(args[1].clone());
     } else {
-        scan_target = format!("files: {}", args[2..].join(", "));
-        for f in &args[2..] {
+        scan_target = format!("files: {}", args[1..].join(", "));
+        for f in &args[1..] {
             if Path::new(f).is_file() {
                 files.push(f.clone());
             }
@@ -210,7 +204,6 @@ pub fn run() {
         return;
     }
     println!("\n=== DEDCORE File Hasher ===");
-    println!("Algorithm: {:?}", algo);
     println!("Scanning {}", scan_target);
     if let Some(ref exts) = filetypes {
         println!("Filtering by file types: {:?}", exts);
@@ -278,16 +271,20 @@ pub fn run() {
     pb.set_style(ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
         .unwrap()
         .progress_chars("##-"));
-    let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
     let mut results = Vec::with_capacity(files.len());
     let mut report = Vec::with_capacity(files.len());
-    for f in &file_refs {
+    for f in &files {
+        let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let policy = default_policy.clone().with_file_type(ext.clone());
+        let algo = policy.choose_algorithm();
+        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
         results.push((f.to_string(), hash.clone()));
         if json_report.is_some() || html_report.is_some() {
             report.push(FileHashReport {
                 file: f.to_string(),
                 hash: hex::encode(hash),
+                algorithm: format!("{:?}", algo),
             });
         }
         pb.inc(1);
@@ -356,9 +353,9 @@ pub fn run() {
         }
     }
     if let Some(ref hpath) = html_report {
-        let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th></tr>");
+        let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
         for r in &report {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td></tr>", r.file, r.hash));
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
         }
         html.push_str("</table></body></html>");
         if let Err(e) = fs::write(hpath, html) {
