@@ -42,4 +42,76 @@ impl QuarantineManager {
     pub fn list_quarantined_files(&self) -> Vec<&QuarantineRecord> {
         self.moved_files.values().collect()
     }
+    
+    pub fn quarantine_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let original_path = PathBuf::from(file_path);
+        
+        // Skip if file doesn't exist
+        if !original_path.exists() {
+            return Ok(());
+        }
+        
+        let metadata = fs::metadata(&original_path)?;
+        let file_size = metadata.len();
+        
+        // Generate unique quarantine filename
+        let filename = original_path.file_name()
+            .ok_or("Invalid filename")?
+            .to_string_lossy();
+        let quarantine_name = format!("{}_{}", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+            filename);
+        
+        let quarantine_path = self.temp_dir.path().join(quarantine_name);
+        
+        // Move file to quarantine
+        fs::rename(&original_path, &quarantine_path)?;
+        
+        let record = QuarantineRecord {
+            original_path: file_path.to_string(),
+            quarantine_path: quarantine_path.to_string_lossy().to_string(),
+            file_size,
+            moved_at: std::time::SystemTime::now(),
+        };
+        
+        self.moved_files.insert(file_path.to_string(), record);
+        
+        Ok(())
+    }
+    
+    pub fn commit_deletions(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
+        let mut deleted_count = 0;
+        
+        for (_, record) in &self.moved_files {
+            let quarantine_path = Path::new(&record.quarantine_path);
+            if quarantine_path.exists() {
+                fs::remove_file(quarantine_path)?;
+                deleted_count += 1;
+            }
+        }
+        
+        Ok(deleted_count)
+    }
+    
+    pub fn rollback(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
+        let mut restored_count = 0;
+        
+        for (_, record) in &self.moved_files {
+            let quarantine_path = Path::new(&record.quarantine_path);
+            let original_path = Path::new(&record.original_path);
+            
+            if quarantine_path.exists() {
+                if let Some(parent) = original_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                
+                fs::rename(quarantine_path, original_path)?;
+                restored_count += 1;
+            }
+        }
+        
+        Ok(restored_count)
+    }
 } 
