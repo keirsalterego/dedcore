@@ -125,11 +125,6 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(root: P, exts: Option<&
 }
 
 pub fn run() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        eprintln!("Usage: {} <file|dir|drive> [file2 ...] [--filetypes=ext1,ext2] [--min-size=BYTES] [--max-size=BYTES] [--min-age=DAYS] [--max-age=DAYS] [--regex=PATTERN] [--dry] [--quarantine-dir=PATH] [--json-report=PATH] [--html-report=PATH] [--safe-delete] [--commit] [--rollback]", args[0]);
-        return;
-    }
     let app = App::parse();
     // Parse security and speed from CLI
     let security = match app.security.to_lowercase().as_str() {
@@ -150,13 +145,14 @@ pub fn run() {
     let mut min_age: Option<u64> = None;
     let mut max_age: Option<u64> = None;
     let mut regex_filter: Option<Regex> = None;
-    let mut dry_run = false;
+    let mut dry_run = app.dry;
     let mut quarantine_dir: Option<String> = None;
     let mut json_report: Option<String> = None;
     let mut html_report: Option<String> = None;
     let mut safe_delete = false;
     let mut commit = false;
     let mut rollback = false;
+    let args: Vec<String> = env::args().collect();
     for arg in &args {
         if let Some(rest) = arg.strip_prefix("--filetypes=") {
             filetypes = Some(rest.split(',').map(|s| s.trim().to_string()).collect());
@@ -205,17 +201,20 @@ pub fn run() {
     }
     let mut files: Vec<String> = Vec::new();
     let scan_target;
-    if Path::new(&args[1]).is_dir() {
-        scan_target = format!("directory: {}", args[1]);
-        files = collect_files_recursively_with_filter(&args[1], filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
-    } else if Path::new(&args[1]).is_file() {
-        scan_target = format!("file: {}", args[1]);
-        files.push(args[1].clone());
+    if app.targets.len() == 1 && Path::new(&app.targets[0]).is_dir() {
+        scan_target = format!("directory: {}", app.targets[0]);
+        files = collect_files_recursively_with_filter(&app.targets[0], filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
+    } else if app.targets.len() == 1 && Path::new(&app.targets[0]).is_file() {
+        scan_target = format!("file: {}", app.targets[0]);
+        files.push(app.targets[0].clone());
     } else {
-        scan_target = format!("files: {}", args[1..].join(", "));
-        for f in &args[1..] {
+        scan_target = format!("files: {}", app.targets.join(", "));
+        for f in &app.targets {
             if Path::new(f).is_file() {
                 files.push(f.clone());
+            } else if Path::new(f).is_dir() {
+                let mut dir_files = collect_files_recursively_with_filter(f, filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
+                files.append(&mut dir_files);
             }
         }
     }
