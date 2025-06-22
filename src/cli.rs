@@ -22,7 +22,7 @@ pub struct App {
     #[arg(short, long)]
     pub dry: bool,
 
-    #[arg(short, long)]
+    #[arg(short = 'p', long)]
     pub dir: Option<PathBuf>,
 
     #[arg(long, value_name = "SECURITY", default_value = "high", help = "Hash security: low, medium, high, maximum")]
@@ -30,6 +30,9 @@ pub struct App {
 
     #[arg(long, value_name = "SPEED", default_value = "balanced", help = "Hash speed: fastest, balanced, mostsecure")]
     pub speed: String,
+
+    #[arg(value_name = "TARGETS", required = true)]
+    pub targets: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -290,6 +293,7 @@ pub fn run() {
         .progress_chars("##-"));
     let mut results = Vec::with_capacity(files.len());
     let mut report = Vec::with_capacity(files.len());
+    let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
         let policy = default_policy.clone().with_file_type(ext.clone());
@@ -303,6 +307,9 @@ pub fn run() {
                 hash: hex::encode(hash),
                 algorithm: format!("{:?}", algo),
             });
+        }
+        if !ext.is_empty() {
+            algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
         }
         pb.inc(1);
     }
@@ -382,5 +389,14 @@ pub fn run() {
         }
     }
     println!("\nProcessed {} files.", results.len());
+
+    if !algo_summary.is_empty() {
+        println!("\nAlgorithm selection summary:");
+        println!("{:<12} | {}", "File Type", "Algorithm");
+        println!("{:-<12}-+-{:-<10}", "", "");
+        for (ext, algo) in &algo_summary {
+            println!("{:<12} | {}", ext, algo);
+        }
+    }
 }
 
