@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crate::hashing::{hash_files_parallel, HashKind, HashingPolicy, Security, Speed};
 use crate::safety::QuarantineManager;
 use std::env;
@@ -11,7 +11,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::time::{SystemTime, UNIX_EPOCH};
 use regex::Regex;
 use serde::Serialize;
-use clap::{Parser, Subcommand};
+use inquire::Confirm;
+use std::collections::HashMap;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -31,6 +32,9 @@ pub struct App {
 
     #[arg(long, value_name = "SPEED", default_value = "balanced", help = "Hash speed: fastest, balanced, mostsecure")]
     pub speed: String,
+
+    #[arg(long, help = "Quarantine all duplicates (all but one per group) after scanning")]
+    pub quarantine_all_dupes: bool,
 
     #[arg(value_name = "TARGETS", required = true)]
     pub targets: Vec<String>,
@@ -309,6 +313,7 @@ pub fn run() {
     let mut results = Vec::with_capacity(files.len());
     let mut report = Vec::with_capacity(files.len());
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
         let policy = default_policy.clone().with_file_type(ext.clone());
@@ -316,6 +321,7 @@ pub fn run() {
         println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
         results.push((f.to_string(), hash.clone()));
+        hash_to_files.entry(hash.clone()).or_default().push(f.clone());
         if json_report.is_some() || html_report.is_some() {
             report.push(FileHashReport {
                 file: f.to_string(),
@@ -414,6 +420,29 @@ pub fn run() {
         }
     }
 
+    // Group duplicates
+    let mut duplicate_groups: Vec<Vec<String>> = Vec::new();
+    for files in hash_to_files.values() {
+        if files.len() > 1 {
+            duplicate_groups.push(files.clone());
+        }
+    }
+    if app.quarantine_all_dupes && !duplicate_groups.is_empty() {
+        println!("\nFound {} groups of duplicates.", duplicate_groups.len());
+        let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+        let mut quarantined = 0;
+        for group in &duplicate_groups {
+            // Keep the first file, quarantine the rest
+            for file in &group[1..] {
+                match qm.quarantine_file(file) {
+                    Ok(_) => quarantined += 1,
+                    Err(e) => println!("Failed to quarantine {}: {}", file, e),
+                }
+            }
+        }
+        println!("Quarantined {} duplicate files.", quarantined);
+    }
+
     if let Some(cmd) = &app.command {
         match cmd {
             QuarantineCmd::File { file } => {
@@ -481,13 +510,15 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
     pb.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
         .unwrap()
         .progress_chars("##-"));
+    let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
         let policy = default_policy.clone().with_file_type(ext.clone());
         let algo = policy.choose_algorithm();
         println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
-        let _hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+        let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+        hash_to_files.entry(hash.clone()).or_default().push(f.clone());
         if !ext.is_empty() {
             algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
         }
@@ -500,6 +531,34 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
         println!("{:-<12}-+-{:-<10}", "", "");
         for (ext, algo) in &algo_summary {
             println!("{:<12} | {}", ext, algo);
+        }
+    }
+    // Group duplicates
+    let mut duplicate_groups: Vec<Vec<String>> = Vec::new();
+    for files in hash_to_files.values() {
+        if files.len() > 1 {
+            duplicate_groups.push(files.clone());
+        }
+    }
+    if !duplicate_groups.is_empty() {
+        println!("\nFound {} groups of duplicates.", duplicate_groups.len());
+        if Confirm::new("Quarantine all duplicates (all but one per group)?")
+            .with_default(false)
+            .prompt()
+            .unwrap_or(false)
+        {
+            let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+            let mut quarantined = 0;
+            for group in &duplicate_groups {
+                // Keep the first file, quarantine the rest
+                for file in &group[1..] {
+                    match qm.quarantine_file(file) {
+                        Ok(_) => quarantined += 1,
+                        Err(e) => println!("Failed to quarantine {}: {}", file, e),
+                    }
+                }
+            }
+            println!("Quarantined {} duplicate files.", quarantined);
         }
     }
 }

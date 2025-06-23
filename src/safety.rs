@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use tempfile::TempDir;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use dirs;
+use serde_json;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuarantineRecord {
     pub original_path: String,
     pub quarantine_path: String,
@@ -22,13 +25,29 @@ pub struct QuarantineManager {
 impl QuarantineManager {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir()?;
-        let quarantine_log = temp_dir.path().join("quarantine.log");
-        
+        let quarantine_log = QuarantineManager::get_quarantine_log_path();
+        let moved_files = if quarantine_log.exists() {
+            let mut file = fs::File::open(&quarantine_log)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            serde_json::from_str(&contents).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
         Ok(Self {
             temp_dir,
-            moved_files: HashMap::new(),
+            moved_files,
             quarantine_log,
         })
+    }
+    
+    fn get_quarantine_log_path() -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let dir = home.join(".dedcore");
+        if !dir.exists() {
+            let _ = fs::create_dir_all(&dir);
+        }
+        dir.join("quarantine.json")
     }
     
     pub fn get_quarantine_stats(&self) -> (usize, u64) {
@@ -66,8 +85,16 @@ impl QuarantineManager {
         
         let quarantine_path = self.temp_dir.path().join(quarantine_name);
         
-        // Move file to quarantine
-        fs::rename(&original_path, &quarantine_path)?;
+        // Move file to quarantine, robust to cross-device
+        match fs::rename(&original_path, &quarantine_path) {
+            Ok(_) => {},
+            Err(e) if e.raw_os_error() == Some(18) => {
+                // Cross-device link error, fallback to copy+delete
+                fs::copy(&original_path, &quarantine_path)?;
+                fs::remove_file(&original_path)?;
+            },
+            Err(e) => return Err(Box::new(e)),
+        }
         
         let record = QuarantineRecord {
             original_path: file_path.to_string(),
@@ -77,7 +104,7 @@ impl QuarantineManager {
         };
         
         self.moved_files.insert(file_path.to_string(), record);
-        
+        self.save_state()?;
         Ok(())
     }
     
@@ -92,6 +119,8 @@ impl QuarantineManager {
             }
         }
         
+        self.moved_files.clear();
+        self.save_state()?;
         Ok(deleted_count)
     }
     
@@ -113,5 +142,18 @@ impl QuarantineManager {
         }
         
         Ok(restored_count)
+    }
+    
+    pub fn remove_quarantined_file(&mut self, path: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let existed = self.moved_files.remove(path).is_some();
+        self.save_state()?;
+        Ok(existed)
+    }
+    
+    pub fn save_state(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let json = serde_json::to_string_pretty(&self.moved_files)?;
+        let mut file = std::fs::File::create(&self.quarantine_log)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
     }
 } 
