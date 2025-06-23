@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use dirs;
 use serde_json;
+use chrono::Local;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuarantineRecord {
@@ -103,24 +104,28 @@ impl QuarantineManager {
             moved_at: std::time::SystemTime::now(),
         };
         
-        self.moved_files.insert(file_path.to_string(), record);
+        self.moved_files.insert(file_path.to_string(), record.clone());
         self.save_state()?;
+        Self::log_recovery("quarantined", &record);
         Ok(())
     }
     
     pub fn commit_deletions(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut deleted_count = 0;
-        
+        let mut to_log = vec![];
         for (_, record) in &self.moved_files {
             let quarantine_path = Path::new(&record.quarantine_path);
             if quarantine_path.exists() {
                 fs::remove_file(quarantine_path)?;
                 deleted_count += 1;
+                to_log.push(record.clone());
             }
         }
-        
         self.moved_files.clear();
         self.save_state()?;
+        for rec in to_log {
+            Self::log_recovery("deleted", &rec);
+        }
         Ok(deleted_count)
     }
     
@@ -155,5 +160,42 @@ impl QuarantineManager {
         let mut file = std::fs::File::create(&self.quarantine_log)?;
         file.write_all(json.as_bytes())?;
         Ok(())
+    }
+    
+    fn log_recovery(action: &str, record: &QuarantineRecord) {
+        let log_path = QuarantineManager::get_recovery_log_path();
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let entry = serde_json::json!({
+            "timestamp": timestamp,
+            "action": action,
+            "original_path": record.original_path,
+            "quarantine_path": record.quarantine_path,
+            "file_size": record.file_size,
+        });
+        let mut log = if let Ok(existing) = std::fs::read_to_string(&log_path) {
+            serde_json::from_str::<Vec<serde_json::Value>>(&existing).unwrap_or_else(|_| vec![])
+        } else {
+            vec![]
+        };
+        log.push(entry);
+        let _ = std::fs::write(&log_path, serde_json::to_string_pretty(&log).unwrap());
+    }
+    
+    fn get_recovery_log_path() -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let dir = home.join(".dedcore");
+        if !dir.exists() {
+            let _ = std::fs::create_dir_all(&dir);
+        }
+        dir.join("dedcore_recovery.json")
+    }
+    
+    pub fn read_recovery_log() -> Vec<serde_json::Value> {
+        let log_path = QuarantineManager::get_recovery_log_path();
+        if let Ok(existing) = std::fs::read_to_string(&log_path) {
+            serde_json::from_str::<Vec<serde_json::Value>>(&existing).unwrap_or_else(|_| vec![])
+        } else {
+            vec![]
+        }
     }
 } 

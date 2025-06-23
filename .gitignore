@@ -17,3 +17,6 @@ node_modules/
 
 # Development workflow documentation
 workflow.md
+
+dedcore_report.json
+dedcore_report.html

@@ -419,12 +419,29 @@ where
         } else {
             serde_json::json!([])
         };
+        let mut duplicate_groups: Vec<Vec<String>> = Vec::new();
+        let mut potential_space_savings: u64 = 0;
+        for files in hash_to_files.values() {
+            if files.len() > 1 {
+                // Calculate space savings: sum size of all but one file
+                let mut group_size = 0;
+                for file in &files[1..] {
+                    if let Ok(meta) = fs::metadata(file) {
+                        group_size += meta.len();
+                    }
+                }
+                potential_space_savings += group_size;
+                duplicate_groups.push(files.clone());
+            }
+        }
         let scan_entry = serde_json::json!({
             "timestamp": timestamp,
             "results": report,
             "summary": {
                 "processed_files": results.len(),
-                "duplicate_groups": hash_to_files.values().filter(|&files| files.len() > 1).count(),
+                "duplicate_groups": duplicate_groups.len(),
+                "potential_space_savings_bytes": potential_space_savings,
+                "potential_space_savings_mb": (potential_space_savings as f64 / 1024.0 / 1024.0),
             }
         });
         if let Some(arr) = all_scans.as_array_mut() {
@@ -450,6 +467,9 @@ where
             html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
         }
         html.push_str("</table><br/>");
+        if potential_space_savings > 0 {
+            html.push_str(&format!("<p>Potential space savings: {:.2} MB</p>", potential_space_savings as f64 / 1024.0 / 1024.0));
+        }
         if let Err(e) = std::fs::write(html_path, html.clone()) {
             eprintln!("Failed to write dedcore_report.html: {}", e);
         } else {
@@ -469,11 +489,24 @@ where
 
     // Group duplicates
     let mut duplicate_groups: Vec<Vec<String>> = Vec::new();
+    let mut potential_space_savings: u64 = 0;
     for files in hash_to_files.values() {
         if files.len() > 1 {
+            // Calculate space savings: sum size of all but one file
+            let mut group_size = 0;
+            for file in &files[1..] {
+                if let Ok(meta) = fs::metadata(file) {
+                    group_size += meta.len();
+                }
+            }
+            potential_space_savings += group_size;
             duplicate_groups.push(files.clone());
         }
     }
+    if potential_space_savings > 0 {
+        println!("Potential space savings: {:.2} MB", potential_space_savings as f64 / 1024.0 / 1024.0);
+    }
+
     if app.quarantine_all_dupes && !duplicate_groups.is_empty() {
         println!("\nFound {} groups of duplicates.", duplicate_groups.len());
         let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
@@ -586,10 +619,22 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
     }
     // Group duplicates
     let mut duplicate_groups: Vec<Vec<String>> = Vec::new();
+    let mut potential_space_savings: u64 = 0;
     for files in hash_to_files.values() {
         if files.len() > 1 {
+            // Calculate space savings: sum size of all but one file
+            let mut group_size = 0;
+            for file in &files[1..] {
+                if let Ok(meta) = fs::metadata(file) {
+                    group_size += meta.len();
+                }
+            }
+            potential_space_savings += group_size;
             duplicate_groups.push(files.clone());
         }
+    }
+    if potential_space_savings > 0 {
+        println!("Potential space savings: {:.2} MB", potential_space_savings as f64 / 1024.0 / 1024.0);
     }
     if !duplicate_groups.is_empty() {
         println!("\nFound {} groups of duplicates.", duplicate_groups.len());
