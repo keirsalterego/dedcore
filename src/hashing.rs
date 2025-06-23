@@ -4,6 +4,7 @@ use sha2::{Sha256, Digest as ShaDigest};
 use blake3;
 use xxhash_rust::xxh3::Xxh3;
 use rayon::prelude::*;
+use memmap2::Mmap;
 
 #[derive(Clone, Debug)]
 pub enum HashKind {
@@ -54,6 +55,29 @@ impl HashConfig {
 // TODO: speed this up before my coffee gets cold
 pub fn hash_file(path: &str, algo: HashKind) -> io::Result<Vec<u8>> {
     let file = File::open(path)?;
+    let metadata = file.metadata()?;
+    let use_mmap = metadata.len() > 10 * 1024 * 1024;
+    if use_mmap {
+        if let Ok(mmap) = unsafe { Mmap::map(&file) } {
+            match algo {
+                HashKind::Sha256 => {
+                    let mut hasher = Sha256::new();
+                    hasher.update(&mmap);
+                    return Ok(hasher.finalize().to_vec());
+                },
+                HashKind::Blake3 => {
+                    let mut hasher = blake3::Hasher::new();
+                    hasher.update(&mmap);
+                    return Ok(hasher.finalize().as_bytes().to_vec());
+                },
+                HashKind::XxHash3 => {
+                    let mut hasher = Xxh3::new();
+                    hasher.update(&mmap);
+                    return Ok(hasher.digest().to_le_bytes().to_vec());
+                },
+            }
+        }
+    }
     let mut reader = BufReader::new(file);
     match algo {
         HashKind::Sha256 => {
@@ -93,7 +117,16 @@ pub fn hash_file_sha256(path: &str) -> std::io::Result<Vec<u8>> {
     use sha2::{Sha256, Digest};
     use std::fs::File;
     use std::io::{BufReader, Read};
+    use memmap2::Mmap;
     let file = File::open(path)?;
+    let metadata = file.metadata()?;
+    if metadata.len() > 10 * 1024 * 1024 {
+        if let Ok(mmap) = unsafe { Mmap::map(&file) } {
+            let mut hasher = Sha256::new();
+            hasher.update(&mmap);
+            return Ok(hasher.finalize().to_vec());
+        }
+    }
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
@@ -109,7 +142,16 @@ pub fn hash_file_blake3(path: &str) -> std::io::Result<Vec<u8>> {
     use blake3;
     use std::fs::File;
     use std::io::{BufReader, Read};
+    use memmap2::Mmap;
     let file = File::open(path)?;
+    let metadata = file.metadata()?;
+    if metadata.len() > 10 * 1024 * 1024 {
+        if let Ok(mmap) = unsafe { Mmap::map(&file) } {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&mmap);
+            return Ok(hasher.finalize().as_bytes().to_vec());
+        }
+    }
     let mut reader = BufReader::new(file);
     let mut hasher = blake3::Hasher::new();
     let mut buffer = [0u8; 8192];
@@ -125,7 +167,16 @@ pub fn hash_file_xxhash3(path: &str) -> std::io::Result<Vec<u8>> {
     use xxhash_rust::xxh3::Xxh3;
     use std::fs::File;
     use std::io::{BufReader, Read};
+    use memmap2::Mmap;
     let file = File::open(path)?;
+    let metadata = file.metadata()?;
+    if metadata.len() > 10 * 1024 * 1024 {
+        if let Ok(mmap) = unsafe { Mmap::map(&file) } {
+            let mut hasher = Xxh3::new();
+            hasher.update(&mmap);
+            return Ok(hasher.digest().to_le_bytes().to_vec());
+        }
+    }
     let mut reader = BufReader::new(file);
     let mut hasher = Xxh3::new();
     let mut buffer = [0u8; 8192];
