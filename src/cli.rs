@@ -15,6 +15,7 @@ use inquire::Confirm;
 use inquire::Text as InquireText;
 use std::collections::HashMap;
 use chrono::Utc;
+use crate::similarity;
 
 #[derive(Subcommand, Debug)]
 pub enum AppCmd {
@@ -544,6 +545,61 @@ where
             }
         }
         println!("Quarantined {} duplicate files.", quarantined);
+    }
+
+    // === Content Similarity for Text Files ===
+    // Only compare files that are not exact duplicates
+    let text_exts = ["txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml"]; // can expand as needed
+    let mut unique_text_files: Vec<&String> = files.iter()
+        .filter(|f| {
+            let ext = std::path::Path::new(f)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            text_exts.contains(&ext.as_str())
+        })
+        .filter(|f| {
+            // Not in any duplicate group
+            !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1)
+        })
+        .collect();
+    let mut similar_groups: Vec<Vec<String>> = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    let threshold = 0.8; // 80% similarity
+    for (i, f1) in unique_text_files.iter().enumerate() {
+        if visited.contains(*f1) { continue; }
+        let mut group = vec![(f1, f1)];
+        let text1 = std::fs::read_to_string(f1).unwrap_or_default();
+        for f2 in unique_text_files.iter().skip(i + 1) {
+            if visited.contains(*f2) { continue; }
+            let text2 = std::fs::read_to_string(f2).unwrap_or_default();
+            let max_len = text1.len().max(text2.len());
+            if max_len == 0 { continue; }
+            let dist = crate::similarity::levenshtein(&text1, &text2);
+            let similarity = 1.0 - (dist as f64 / max_len as f64);
+            if similarity >= threshold {
+                group.push((f1, f2));
+                visited.insert(*f2);
+            }
+        }
+        if group.len() > 1 {
+            let group_files: Vec<String> = group.iter().map(|(_, f)| (**f).clone()).collect();
+            similar_groups.push(group_files);
+            for (_, f) in group {
+                visited.insert(*f);
+            }
+        }
+    }
+    if !similar_groups.is_empty() {
+        println!("\n=== Similar Text File Groups (>= 80% similar) ===");
+        for (i, group) in similar_groups.iter().enumerate() {
+            println!("Group {}:", i + 1);
+            for f in group {
+                println!("  {}", f);
+            }
+            println!("");
+        }
     }
 
     if let Some(cmd) = &app.cmd {
