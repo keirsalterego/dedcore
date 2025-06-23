@@ -75,6 +75,12 @@ pub enum QuarantineCmd {
     Commit,
     /// Rollback quarantined files (restore them to original locations)
     Rollback,
+    /// List all currently quarantined files
+    List,
+    /// Restore a specific quarantined file by its original path
+    Restore {
+        #[arg(value_name = "ORIGINAL_PATH")] original_path: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -562,6 +568,43 @@ where
                     match qm.rollback() {
                         Ok(count) => println!("{} quarantined files restored.", count),
                         Err(e) => eprintln!("Failed to rollback quarantined files: {}", e),
+                    }
+                }
+                QuarantineCmd::List => {
+                    let qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let files = qm.list_quarantined_files();
+                    if files.is_empty() {
+                        println!("No files are currently quarantined.");
+                    } else {
+                        println!("Currently quarantined files:");
+                        for rec in files {
+                            println!("{} ({} bytes)", rec.original_path, rec.file_size);
+                        }
+                    }
+                }
+                QuarantineCmd::Restore { original_path } => {
+                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let files: Vec<_> = qm.list_quarantined_files().into_iter().cloned().collect();
+                    let rec = files.iter().find(|rec| rec.original_path == *original_path);
+                    if let Some(rec) = rec {
+                        let quarantine_path = &rec.quarantine_path;
+                        let original_path = &rec.original_path;
+                        if std::path::Path::new(quarantine_path).exists() {
+                            if let Some(parent) = std::path::Path::new(original_path).parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+                            match std::fs::rename(quarantine_path, original_path) {
+                                Ok(_) => {
+                                    println!("Restored {}", original_path);
+                                    let _ = qm.remove_quarantined_file(original_path);
+                                },
+                                Err(e) => println!("Failed to restore {}: {}", original_path, e),
+                            }
+                        } else {
+                            println!("Quarantined file not found: {}", quarantine_path);
+                        }
+                    } else {
+                        println!("No quarantined entry found for {}", original_path);
                     }
                 }
             },
