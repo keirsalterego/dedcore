@@ -60,6 +60,9 @@ pub struct App {
 
     #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8)")]
     pub similarity_threshold: Option<f64>,
+
+    #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar images (0.0-1.0, default: 0.9)")]
+    pub image_similarity_threshold: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -598,6 +601,65 @@ where
     if !similar_groups.is_empty() {
         println!("\n=== Similar Text File Groups (>= {:.0}% similar) ===", threshold * 100.0);
         for (i, group) in similar_groups.iter().enumerate() {
+            println!("Group {}:", i + 1);
+            for f in group {
+                println!("  {}", f);
+            }
+            println!("");
+        }
+    }
+
+    // === Image Similarity for Image Files ===
+    let image_exts = ["jpg", "jpeg", "png", "bmp", "gif", "webp"];
+    let mut unique_image_files: Vec<&String> = files.iter()
+        .filter(|f| {
+            let ext = std::path::Path::new(f)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            image_exts.contains(&ext.as_str())
+        })
+        .filter(|f| {
+            // Not in any duplicate group
+            !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1)
+        })
+        .collect();
+    let mut similar_image_groups: Vec<Vec<String>> = Vec::new();
+    let mut visited_images = std::collections::HashSet::new();
+    let image_similarity_threshold = app.image_similarity_threshold.unwrap_or(0.9);
+    let img_threshold = image_similarity_threshold;
+    for (i, f1) in unique_image_files.iter().enumerate() {
+        if visited_images.contains(*f1) { continue; }
+        let mut group = vec![(f1, f1, 1.0f32)];
+        let hash1 = match crate::similarity::average_hash_image(std::path::Path::new(f1)) {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        for f2 in unique_image_files.iter().skip(i + 1) {
+            if visited_images.contains(*f2) { continue; }
+            let hash2 = match crate::similarity::average_hash_image(std::path::Path::new(f2)) {
+                Ok(h) => h,
+                Err(_) => continue,
+            };
+            let dist = crate::similarity::hamming_distance(hash1, hash2);
+            let similarity = 1.0 - (dist as f32 / 64.0);
+            if similarity >= img_threshold as f32 {
+                group.push((f1, f2, similarity));
+                visited_images.insert(*f2);
+            }
+        }
+        if group.len() > 1 {
+            let group_files: Vec<String> = group.iter().map(|(_, f, _)| (**f).clone()).collect();
+            similar_image_groups.push(group_files);
+            for (_, f, _) in group {
+                visited_images.insert(*f);
+            }
+        }
+    }
+    if !similar_image_groups.is_empty() {
+        println!("\n=== Similar Image File Groups (>= {:.0}% similar) ===", img_threshold * 100.0);
+        for (i, group) in similar_image_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for f in group {
                 println!("  {}", f);
