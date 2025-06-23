@@ -190,6 +190,11 @@ pub fn scan_menu() {
         .with_default(false)
         .prompt()
         .unwrap_or(false);
+    // Similarity threshold for text file grouping
+    let similarity_threshold = Text::new("Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8):")
+        .with_placeholder("0.8")
+        .prompt()
+        .unwrap_or_default();
     // Build CLI args
     let mut args = vec!["dedcore".to_string()];
     args.push(path.clone());
@@ -218,6 +223,17 @@ pub fn scan_menu() {
     }
     if quarantine_all {
         args.push("--quarantine-all-dupes".to_string());
+    }
+    if !similarity_threshold.trim().is_empty() {
+        if let Ok(val) = similarity_threshold.trim().parse::<f64>() {
+            if val >= 0.0 && val <= 1.0 {
+                args.push(format!("--similarity-threshold={}", val));
+            } else {
+                println!("Invalid similarity threshold, must be between 0.0 and 1.0. Using default (0.8).");
+            }
+        } else {
+            println!("Invalid similarity threshold input. Using default (0.8).");
+        }
     }
     // Call CLI logic with constructed args
     cli::run_with_args(args);

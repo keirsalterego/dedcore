@@ -57,6 +57,9 @@ pub struct App {
 
     #[arg(long, value_name = "PATH", help = "Path to save HTML report")]
     pub html_report: Option<String>,
+
+    #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8)")]
+    pub similarity_threshold: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -549,7 +552,7 @@ where
 
     // === Content Similarity for Text Files ===
     // Only compare files that are not exact duplicates
-    let text_exts = ["txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml"]; // can expand as needed
+    let text_exts = ["txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml"];
     let mut unique_text_files: Vec<&String> = files.iter()
         .filter(|f| {
             let ext = std::path::Path::new(f)
@@ -566,7 +569,8 @@ where
         .collect();
     let mut similar_groups: Vec<Vec<String>> = Vec::new();
     let mut visited = std::collections::HashSet::new();
-    let threshold = 0.8; // 80% similarity
+    let similarity_threshold = app.similarity_threshold.unwrap_or(0.8);
+    let threshold = similarity_threshold; // use user-specified threshold
     for (i, f1) in unique_text_files.iter().enumerate() {
         if visited.contains(*f1) { continue; }
         let mut group = vec![(f1, f1)];
@@ -592,7 +596,7 @@ where
         }
     }
     if !similar_groups.is_empty() {
-        println!("\n=== Similar Text File Groups (>= 80% similar) ===");
+        println!("\n=== Similar Text File Groups (>= {:.0}% similar) ===", threshold * 100.0);
         for (i, group) in similar_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for f in group {
