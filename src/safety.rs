@@ -121,6 +121,7 @@ impl QuarantineManager {
                 to_log.push(record.clone());
             }
         }
+        // TODO: Use retain for more efficient cleanup if needed in the future.
         self.moved_files.clear();
         self.save_state()?;
         for rec in to_log {

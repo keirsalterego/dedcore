@@ -28,35 +28,20 @@ pub enum Speed {
 }
 
 #[derive(Clone, Debug)]
-pub struct HashingPolicy {
+pub struct HashConfig {
     pub security: Security,
     pub speed: Speed,
-    pub file_type: Option<String>,
 }
 
-impl HashingPolicy {
+impl HashConfig {
     pub fn new(security: Security, speed: Speed) -> Self {
-        Self {
-            security,
-            speed,
-            file_type: None,
-        }
+        Self { security, speed }
     }
-    pub fn with_file_type(mut self, file_type: String) -> Self {
-        self.file_type = Some(file_type);
-        self
-    }
-    pub fn choose_algorithm(&self) -> HashKind {
-        match (&self.file_type, &self.security, &self.speed) {
-            (Some(ft), _, Speed::Fastest) if ft.eq_ignore_ascii_case("jpg") || ft.eq_ignore_ascii_case("jpeg") || ft.eq_ignore_ascii_case("png") || ft.eq_ignore_ascii_case("mp4") || ft.eq_ignore_ascii_case("mp3") => {
-                HashKind::XxHash3
-            }
-            (Some(ft), Security::High | Security::Maximum, _) if ft.eq_ignore_ascii_case("txt") || ft.eq_ignore_ascii_case("md") || ft.eq_ignore_ascii_case("rs") || ft.eq_ignore_ascii_case("py") => {
-                HashKind::Sha256
-            }
-            (Some(ft), _, Speed::Balanced) if ft.eq_ignore_ascii_case("zip") || ft.eq_ignore_ascii_case("tar") || ft.eq_ignore_ascii_case("gz") => {
-                HashKind::Blake3
-            }
+    pub fn choose_algorithm(&self, ext: &str) -> HashKind {
+        match (ext.to_lowercase().as_str(), &self.security, &self.speed) {
+            ("jpg" | "jpeg" | "png" | "mp4" | "mp3", _, Speed::Fastest) => HashKind::XxHash3,
+            ("txt" | "md" | "rs" | "py", Security::High | Security::Maximum, _) => HashKind::Sha256,
+            ("zip" | "tar" | "gz", _, Speed::Balanced) => HashKind::Blake3,
             (_, Security::Maximum, _) => HashKind::Sha256,
             (_, Security::High, _) => HashKind::Blake3,
             (_, _, Speed::Fastest) => HashKind::XxHash3,
@@ -65,6 +50,8 @@ impl HashingPolicy {
     }
 }
 
+// 8KB buffer. Why? Because it feels right.
+// TODO: speed this up before my coffee gets cold
 pub fn hash_file(path: &str, algo: HashKind) -> io::Result<Vec<u8>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);

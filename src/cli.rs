@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
-use crate::hashing::{hash_files_parallel, HashKind, HashingPolicy, Security, Speed};
+use crate::hashing::{HashConfig, Security, Speed};
 use crate::safety::QuarantineManager;
 use std::env;
 use hex;
@@ -10,12 +10,10 @@ use walkdir;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::{SystemTime, UNIX_EPOCH};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use inquire::Confirm;
-use inquire::Text as InquireText;
 use std::collections::HashMap;
-use chrono::Utc;
-use crate::similarity;
+use std::collections::BTreeMap;
 
 #[derive(Subcommand, Debug)]
 pub enum AppCmd {
@@ -63,6 +61,31 @@ pub struct App {
 
     #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar images (0.0-1.0, default: 0.9)")]
     pub image_similarity_threshold: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct FileHashCacheEntry {
+    size: u64,
+    mtime: u64,
+    hash: Vec<u8>,
+}
+
+fn load_cache(path: &str) -> BTreeMap<String, FileHashCacheEntry> {
+    let cache_path = std::path::Path::new(path);
+    if cache_path.exists() {
+        if let Ok(data) = std::fs::read_to_string(cache_path) {
+            if let Ok(map) = serde_json::from_str(&data) {
+                return map;
+            }
+        }
+    }
+    BTreeMap::new()
+}
+
+fn save_cache(path: &str, cache: &BTreeMap<String, FileHashCacheEntry>) {
+    if let Ok(json) = serde_json::to_string_pretty(cache) {
+        let _ = std::fs::write(path, json);
+    }
 }
 
 #[derive(Serialize)]
@@ -200,7 +223,7 @@ where
         "mostsecure" => Speed::MostSecure,
         _ => Speed::Balanced,
     };
-    let default_policy = HashingPolicy::new(security, speed);
+    let default_config = HashConfig::new(security, speed);
     let mut filetypes: Option<Vec<String>> = None;
     let mut min_size: Option<u64> = None;
     let mut max_size: Option<u64> = None;
@@ -338,16 +361,36 @@ where
     pb.set_style(ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
         .unwrap()
         .progress_chars("##-"));
+    let mut cache = load_cache(".dedcore_cache.json");
     let mut results = Vec::with_capacity(files.len());
     let mut report: Vec<FileHashReport> = Vec::with_capacity(files.len());
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let policy = default_policy.clone().with_file_type(ext.clone());
-        let algo = policy.choose_algorithm();
-        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
-        let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+        let algo = default_config.choose_algorithm(&ext);
+        let meta = match std::fs::metadata(f) {
+            Ok(m) => m,
+            Err(_) => continue, // file missing? skip it. I hate people.
+        };
+        let size = meta.len();
+        let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        let hash = if let Some(entry) = cache.get(f) {
+            if entry.size == size && entry.mtime == mtime {
+                // unchanged, so don't waste time re-hashing
+                entry.hash.clone()
+            } else {
+                // file changed, gotta hash again. I hate people.
+                let h = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+                cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: h.clone() });
+                h
+            }
+        } else {
+            // new file, new pain
+            let h = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+            cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: h.clone() });
+            h
+        };
         results.push((f.to_string(), hash.clone()));
         hash_to_files.entry(hash.clone()).or_default().push(f.clone());
         report.push(FileHashReport {
@@ -361,6 +404,7 @@ where
         pb.inc(1);
     }
     pb.finish_with_message("done");
+    save_cache(".dedcore_cache.json", &cache);
     
     if safe_delete {
         println!("\n=== Safe Delete Mode ===");
@@ -554,52 +598,76 @@ where
     }
 
     // === Content Similarity for Text Files ===
-    // Only compare files that are not exact duplicates
+    // Optimization: Bucket by file size to avoid O(n^2) on large sets
     let text_exts = ["txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml"];
-    let mut unique_text_files: Vec<&String> = files.iter()
-        .filter(|f| {
-            let ext = std::path::Path::new(f)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-            text_exts.contains(&ext.as_str())
-        })
-        .filter(|f| {
-            // Not in any duplicate group
-            !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1)
-        })
-        .collect();
+    let mut text_buckets: std::collections::HashMap<u64, Vec<&String>> = std::collections::HashMap::new();
+    for f in files.iter().filter(|f| {
+        let ext = std::path::Path::new(f)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        text_exts.contains(&ext.as_str())
+    }) {
+        // Only consider files not in any duplicate group
+        if !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1) {
+            let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
+            text_buckets.entry(size).or_default().push(f);
+        }
+    }
     let mut similar_groups: Vec<Vec<String>> = Vec::new();
     let mut visited = std::collections::HashSet::new();
     let similarity_threshold = app.similarity_threshold.unwrap_or(0.8);
-    let threshold = similarity_threshold; // use user-specified threshold
-    for (i, f1) in unique_text_files.iter().enumerate() {
-        if visited.contains(*f1) { continue; }
-        let mut group = vec![(f1, f1)];
-        let text1 = std::fs::read_to_string(f1).unwrap_or_default();
-        for f2 in unique_text_files.iter().skip(i + 1) {
-            if visited.contains(*f2) { continue; }
-            let text2 = std::fs::read_to_string(f2).unwrap_or_default();
-            let max_len = text1.len().max(text2.len());
-            if max_len == 0 { continue; }
-            let dist = crate::similarity::levenshtein(&text1, &text2);
-            let similarity = 1.0 - (dist as f64 / max_len as f64);
-            if similarity >= threshold {
-                group.push((f1, f2));
-                visited.insert(*f2);
-            }
-        }
-        if group.len() > 1 {
-            let group_files: Vec<String> = group.iter().map(|(_, f)| (**f).clone()).collect();
-            similar_groups.push(group_files);
-            for (_, f) in group {
-                visited.insert(*f);
-            }
+    // Use Rayon for parallel similarity if there are many files in a bucket
+    for (_size, bucket) in text_buckets.iter() {
+        if bucket.len() < 2 { continue; }
+        let pairs: Vec<_> = (0..bucket.len())
+            .flat_map(|i| (i+1..bucket.len()).map(move |j| (i, j)))
+            .collect();
+        let results: Vec<_> = if bucket.len() > 20 {
+            use rayon::prelude::*;
+            pairs.par_iter().map(|&(i, j)| {
+                let f1 = bucket[i];
+                let f2 = bucket[j];
+                let text1 = std::fs::read_to_string(f1).unwrap_or_default();
+                let text2 = std::fs::read_to_string(f2).unwrap_or_default();
+                let max_len = text1.len().max(text2.len());
+                if max_len == 0 { return None; }
+                let dist = crate::similarity::levenshtein(&text1, &text2);
+                let similarity = 1.0 - (dist as f64 / max_len as f64);
+                if similarity >= similarity_threshold {
+                    Some((f1, f2))
+                } else {
+                    None
+                }
+            }).collect()
+        } else {
+            pairs.iter().map(|&(i, j)| {
+                let f1 = bucket[i];
+                let f2 = bucket[j];
+                let text1 = std::fs::read_to_string(f1).unwrap_or_default();
+                let text2 = std::fs::read_to_string(f2).unwrap_or_default();
+                let max_len = text1.len().max(text2.len());
+                if max_len == 0 { return None; }
+                let dist = crate::similarity::levenshtein(&text1, &text2);
+                let similarity = 1.0 - (dist as f64 / max_len as f64);
+                if similarity >= similarity_threshold {
+                    Some((f1, f2))
+                } else {
+                    None
+                }
+            }).collect()
+        };
+        for pair in results.into_iter().flatten() {
+            let (f1, f2) = pair;
+            if visited.contains(f1) || visited.contains(f2) { continue; }
+            similar_groups.push(vec![f1.to_string(), f2.to_string()]);
+            visited.insert(f1);
+            visited.insert(f2);
         }
     }
     if !similar_groups.is_empty() {
-        println!("\n=== Similar Text File Groups (>= {:.0}% similar) ===", threshold * 100.0);
+        println!("\n=== Similar Text File Groups (>= {:.0}% similar) ===", similarity_threshold * 100.0);
         for (i, group) in similar_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for f in group {
@@ -610,55 +678,80 @@ where
     }
 
     // === Image Similarity for Image Files ===
+    // Optimization: Bucket by file size to avoid O(n^2) on large sets
     let image_exts = ["jpg", "jpeg", "png", "bmp", "gif", "webp"];
-    let mut unique_image_files: Vec<&String> = files.iter()
-        .filter(|f| {
-            let ext = std::path::Path::new(f)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-            image_exts.contains(&ext.as_str())
-        })
-        .filter(|f| {
-            // Not in any duplicate group
-            !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1)
-        })
-        .collect();
+    let mut image_buckets: std::collections::HashMap<u64, Vec<&String>> = std::collections::HashMap::new();
+    for f in files.iter().filter(|f| {
+        let ext = std::path::Path::new(f)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        image_exts.contains(&ext.as_str())
+    }) {
+        if !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1) {
+            let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
+            image_buckets.entry(size).or_default().push(f);
+        }
+    }
     let mut similar_image_groups: Vec<Vec<(String, f32)>> = Vec::new();
     let mut visited_images = std::collections::HashSet::<String>::new();
     let image_similarity_threshold = app.image_similarity_threshold.unwrap_or(0.9);
-    let img_threshold = image_similarity_threshold;
-    for (i, f1) in unique_image_files.iter().enumerate() {
-        if visited_images.contains(*f1) { continue; }
-        let mut group = vec![(f1.to_string(), 1.0f32)];
-        let hash1 = match crate::similarity::average_hash_image(std::path::Path::new(f1)) {
-            Ok(h) => h,
-            Err(_) => continue,
+    for (_size, bucket) in image_buckets.iter() {
+        if bucket.len() < 2 { continue; }
+        let pairs: Vec<_> = (0..bucket.len())
+            .flat_map(|i| (i+1..bucket.len()).map(move |j| (i, j)))
+            .collect();
+        let results: Vec<_> = if bucket.len() > 20 {
+            use rayon::prelude::*;
+            pairs.par_iter().map(|&(i, j)| {
+                let f1 = bucket[i];
+                let f2 = bucket[j];
+                let hash1 = crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
+                let hash2 = crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
+                match (hash1, hash2) {
+                    (Some(h1), Some(h2)) => {
+                        let dist = crate::similarity::hamming_distance(h1, h2);
+                        let similarity = 1.0 - (dist as f32 / 64.0);
+                        if similarity >= image_similarity_threshold as f32 {
+                            Some((f1, f2, similarity))
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None
+                }
+            }).collect()
+        } else {
+            pairs.iter().map(|&(i, j)| {
+                let f1 = bucket[i];
+                let f2 = bucket[j];
+                let hash1 = crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
+                let hash2 = crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
+                match (hash1, hash2) {
+                    (Some(h1), Some(h2)) => {
+                        let dist = crate::similarity::hamming_distance(h1, h2);
+                        let similarity = 1.0 - (dist as f32 / 64.0);
+                        if similarity >= image_similarity_threshold as f32 {
+                            Some((f1, f2, similarity))
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None
+                }
+            }).collect()
         };
-        for f2 in unique_image_files.iter().skip(i + 1) {
-            if visited_images.contains(*f2) { continue; }
-            let hash2 = match crate::similarity::average_hash_image(std::path::Path::new(f2)) {
-                Ok(h) => h,
-                Err(_) => continue,
-            };
-            let dist = crate::similarity::hamming_distance(hash1, hash2);
-            let similarity = 1.0 - (dist as f32 / 64.0);
-            if similarity >= img_threshold as f32 {
-                group.push(((*f2).clone(), similarity));
-                visited_images.insert((*f2).clone());
-            }
-        }
-        if group.len() > 1 {
-            let file_names: Vec<String> = group.iter().map(|(f, _)| f.clone()).collect();
-            similar_image_groups.push(group);
-            for f in file_names {
-                visited_images.insert(f);
-            }
+        for triple in results.into_iter().flatten() {
+            let (f1, f2, similarity) = triple;
+            if visited_images.contains(f1) || visited_images.contains(f2) { continue; }
+            similar_image_groups.push(vec![(f1.to_string(), 1.0), (f2.to_string(), similarity)]);
+            visited_images.insert(f1.to_string());
+            visited_images.insert(f2.to_string());
         }
     }
     if !similar_image_groups.is_empty() {
-        println!("\n=== Similar Image File Groups (>= {:.0}% similar) ===", img_threshold * 100.0);
+        println!("\n=== Similar Image File Groups (>= {:.0}% similar) ===", image_similarity_threshold * 100.0);
         for (i, group) in similar_image_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for (f, sim) in group {
@@ -678,6 +771,7 @@ where
         let mut report_json = serde_json::to_value(&report).unwrap_or(serde_json::json!([]));
         let mut obj = serde_json::Map::new();
         obj.insert("file_hash_report".to_string(), report_json);
+        obj.insert("duplicate_groups".to_string(), serde_json::json!(duplicate_groups));
         obj.insert("similar_image_groups".to_string(), serde_json::json!(similar_image_groups_for_report));
         if let Err(e) = fs::write(jpath, serde_json::to_string_pretty(&obj).unwrap()) {
             eprintln!("Failed to write JSON report: {}", e);
@@ -691,6 +785,16 @@ where
             html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
         }
         html.push_str("</table>");
+        if !duplicate_groups.is_empty() {
+            html.push_str("<h2>Duplicate File Groups</h2>");
+            for (i, group) in duplicate_groups.iter().enumerate() {
+                html.push_str(&format!("<b>Group {}</b><ul>", i + 1));
+                for f in group {
+                    html.push_str(&format!("<li>{}</li>", f));
+                }
+                html.push_str("</ul>");
+            }
+        }
         if !similar_image_groups.is_empty() {
             html.push_str("<h2>Similar Image File Groups</h2>");
             for (i, group) in similar_image_groups.iter().enumerate() {
@@ -816,7 +920,7 @@ pub fn run() {
 }
 
 pub fn run_with_ui(path: String, security: String, speed: String) {
-    use crate::hashing::{HashingPolicy, Security, Speed};
+    use crate::hashing::{HashConfig, Security, Speed};
     use std::path::Path;
     use regex::Regex;
     let security = match security.to_lowercase().as_str() {
@@ -830,7 +934,7 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
         "mostsecure" => Speed::MostSecure,
         _ => Speed::Balanced,
     };
-    let default_policy = HashingPolicy::new(security, speed);
+    let default_policy = HashConfig::new(security, speed);
     let mut files: Vec<String> = Vec::new();
     let scan_target;
     if Path::new(&path).is_dir() {
@@ -858,9 +962,8 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let policy = default_policy.clone().with_file_type(ext.clone());
-        let algo = policy.choose_algorithm();
-        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, policy.security, policy.speed);
+        let algo = default_policy.choose_algorithm(&ext);
+        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, default_policy.security, default_policy.speed);
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
         hash_to_files.entry(hash.clone()).or_default().push(f.clone());
         if !ext.is_empty() {

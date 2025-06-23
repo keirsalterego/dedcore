@@ -157,31 +157,37 @@ pub fn scan_menu() {
     // Speed
     let speed = select_speed();
     // Filetypes
-    let filetypes = Text::new("Filter by filetypes (comma-separated, leave blank for all):")
+    let filetypes = Text::new("File types to include (comma-separated, e.g. txt,jpg; leave blank for all):")
+        .with_placeholder("txt,jpg")
         .prompt()
         .unwrap_or_default();
     // Min size
     let min_size = Text::new("Minimum file size in bytes (leave blank for none):")
+        .with_placeholder("0")
         .prompt()
         .unwrap_or_default();
     // Max size
     let max_size = Text::new("Maximum file size in bytes (leave blank for none):")
+        .with_placeholder("1000000")
         .prompt()
         .unwrap_or_default();
     // Min age
     let min_age = Text::new("Minimum file age in days (leave blank for none):")
+        .with_placeholder("0")
         .prompt()
         .unwrap_or_default();
     // Max age
     let max_age = Text::new("Maximum file age in days (leave blank for none):")
+        .with_placeholder("365")
         .prompt()
         .unwrap_or_default();
     // Regex
     let regex = Text::new("Regex filter for file paths (leave blank for none):")
+        .with_placeholder(".*backup.*")
         .prompt()
         .unwrap_or_default();
     // Dry run
-    let dry_run = Confirm::new("Dry run (show what would happen, but make no changes)?")
+    let dry_run = Confirm::new("Dry run? (Show what would happen, but make no changes)")
         .with_default(false)
         .prompt()
         .unwrap_or(false);
@@ -195,6 +201,35 @@ pub fn scan_menu() {
         .with_placeholder("0.8")
         .prompt()
         .unwrap_or_default();
+    // Similarity threshold for image file grouping
+    let image_similarity_threshold = Text::new("Minimum similarity threshold for grouping similar image files (0.0-1.0, default: 0.9):")
+        .with_placeholder("0.9")
+        .prompt()
+        .unwrap_or_default();
+
+    // --- Pre-scan summary ---
+    // This summary helps users catch mistakes before running a potentially expensive scan.
+    // Confirmation step is a good UX touch for safety.
+    println!("\n=== Scan Summary ===");
+    println!("Path: {}", path);
+    println!("Security: {}", security);
+    println!("Speed: {}", speed);
+    if !filetypes.is_empty() { println!("File types: {}", filetypes); }
+    if !min_size.is_empty() { println!("Min size: {} bytes", min_size); }
+    if !max_size.is_empty() { println!("Max size: {} bytes", max_size); }
+    if !min_age.is_empty() { println!("Min age: {} days", min_age); }
+    if !max_age.is_empty() { println!("Max age: {} days", max_age); }
+    if !regex.is_empty() { println!("Regex: {}", regex); }
+    println!("Dry run: {}", if dry_run { "yes" } else { "no" });
+    println!("Quarantine all duplicates: {}", if quarantine_all { "yes" } else { "no" });
+    if !similarity_threshold.is_empty() { println!("Text similarity threshold: {}", similarity_threshold); }
+    if !image_similarity_threshold.is_empty() { println!("Image similarity threshold: {}", image_similarity_threshold); }
+    println!("====================\n");
+    // Confirm before running
+    if !Confirm::new("Proceed with scan?").with_default(true).prompt().unwrap_or(false) {
+        println!("Scan cancelled.");
+        return;
+    }
     // Build CLI args
     let mut args = vec!["dedcore".to_string()];
     args.push(path.clone());
@@ -233,6 +268,17 @@ pub fn scan_menu() {
             }
         } else {
             println!("Invalid similarity threshold input. Using default (0.8).");
+        }
+    }
+    if !image_similarity_threshold.trim().is_empty() {
+        if let Ok(val) = image_similarity_threshold.trim().parse::<f64>() {
+            if val >= 0.0 && val <= 1.0 {
+                args.push(format!("--image-similarity-threshold={}", val));
+            } else {
+                println!("Invalid image similarity threshold, must be between 0.0 and 1.0. Using default (0.9).");
+            }
+        } else {
+            println!("Invalid image similarity threshold input. Using default (0.9).");
         }
     }
     // Call CLI logic with constructed args
