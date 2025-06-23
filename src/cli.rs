@@ -88,6 +88,15 @@ fn save_cache(path: &str, cache: &BTreeMap<String, FileHashCacheEntry>) {
     }
 }
 
+fn clean_cache(cache: &mut BTreeMap<String, FileHashCacheEntry>) {
+    let files: Vec<String> = cache.keys().cloned().collect();
+    for f in files {
+        if !std::path::Path::new(&f).exists() {
+            cache.remove(&f);
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct FileHashReport {
     file: String,
@@ -362,40 +371,40 @@ where
         .unwrap()
         .progress_chars("##-"));
     let mut cache = load_cache(".dedcore_cache.json");
+    clean_cache(&mut cache);
     let mut results = Vec::with_capacity(files.len());
     let mut report: Vec<FileHashReport> = Vec::with_capacity(files.len());
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
+    let mut skipped = 0;
     for f in &files {
         let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
         let algo = default_config.choose_algorithm(&ext);
         let meta = match std::fs::metadata(f) {
             Ok(m) => m,
-            Err(_) => continue, // file missing? skip it. I hate people.
+            Err(_) => continue,
         };
         let size = meta.len();
         let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-        let hash = if let Some(entry) = cache.get(f) {
+        if let Some(entry) = cache.get(f) {
             if entry.size == size && entry.mtime == mtime {
-                // unchanged, so don't waste time re-hashing
-                entry.hash.clone()
-            } else {
-                // file changed, gotta hash again. I hate people.
-                let h = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
-                cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: h.clone() });
-                h
+                skipped += 1;
+                hash_to_files.entry(entry.hash.clone()).or_default().push(f.clone());
+                report.push(FileHashReport {
+                    file: f.to_string(),
+                    hash: hex::encode(&entry.hash),
+                    algorithm: format!("{:?}", algo),
+                });
+                continue;
             }
-        } else {
-            // new file, new pain
-            let h = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
-            cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: h.clone() });
-            h
-        };
+        }
+        let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
+        cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: hash.clone() });
         results.push((f.to_string(), hash.clone()));
         hash_to_files.entry(hash.clone()).or_default().push(f.clone());
         report.push(FileHashReport {
             file: f.to_string(),
-            hash: hex::encode(hash),
+            hash: hex::encode(&hash),
             algorithm: format!("{:?}", algo),
         });
         if !ext.is_empty() {
@@ -405,6 +414,9 @@ where
     }
     pb.finish_with_message("done");
     save_cache(".dedcore_cache.json", &cache);
+    if skipped > 0 {
+        println!("Skipped {} unchanged files due to incremental scanning.", skipped);
+    }
     
     if safe_delete {
         println!("\n=== Safe Delete Mode ===");
