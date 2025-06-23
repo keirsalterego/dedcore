@@ -16,9 +16,16 @@ use inquire::Text as InquireText;
 use std::collections::HashMap;
 use chrono::Utc;
 
+#[derive(Subcommand, Debug)]
+pub enum AppCmd {
+    #[command(subcommand)]
+    Quarantine(QuarantineCmd),
+    #[command(subcommand)]
+    Recovery(RecoveryCmd),
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-
 pub struct App {
     #[arg(short, long)]
     pub filetypes: Option<String>,
@@ -42,7 +49,7 @@ pub struct App {
     pub targets: Vec<String>,
 
     #[command(subcommand)]
-    pub command: Option<QuarantineCmd>,
+    pub cmd: Option<AppCmd>,
 
     #[arg(long, value_name = "PATH", help = "Path to save JSON report")]
     pub json_report: Option<String>,
@@ -68,6 +75,16 @@ pub enum QuarantineCmd {
     Commit,
     /// Rollback quarantined files (restore them to original locations)
     Rollback,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RecoveryCmd {
+    /// List recovery log
+    List,
+    /// Restore a file from quarantine by original path
+    Restore {
+        #[arg(value_name = "ORIGINAL_PATH")] original_path: String,
+    },
 }
 
 fn parse_size_arg(arg: &str) -> Option<u64> {
@@ -523,29 +540,66 @@ where
         println!("Quarantined {} duplicate files.", quarantined);
     }
 
-    if let Some(cmd) = &app.command {
+    if let Some(cmd) = &app.cmd {
         match cmd {
-            QuarantineCmd::File { file } => {
-                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
-                match qm.quarantine_file(file) {
-                    Ok(_) => println!("File quarantined: {}", file),
-                    Err(e) => eprintln!("Failed to quarantine file: {}: {}", file, e),
+            AppCmd::Quarantine(qcmd) => match qcmd {
+                QuarantineCmd::File { file } => {
+                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    match qm.quarantine_file(file) {
+                        Ok(_) => println!("File quarantined: {}", file),
+                        Err(e) => eprintln!("Failed to quarantine file: {}: {}", file, e),
+                    }
                 }
-            }
-            QuarantineCmd::Commit => {
-                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
-                match qm.commit_deletions() {
-                    Ok(count) => println!("{} quarantined files permanently deleted.", count),
-                    Err(e) => eprintln!("Failed to commit deletions: {}", e),
+                QuarantineCmd::Commit => {
+                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    match qm.commit_deletions() {
+                        Ok(count) => println!("{} quarantined files permanently deleted.", count),
+                        Err(e) => eprintln!("Failed to commit deletions: {}", e),
+                    }
                 }
-            }
-            QuarantineCmd::Rollback => {
-                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
-                match qm.rollback() {
-                    Ok(count) => println!("{} quarantined files restored.", count),
-                    Err(e) => eprintln!("Failed to rollback quarantined files: {}", e),
+                QuarantineCmd::Rollback => {
+                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    match qm.rollback() {
+                        Ok(count) => println!("{} quarantined files restored.", count),
+                        Err(e) => eprintln!("Failed to rollback quarantined files: {}", e),
+                    }
                 }
-            }
+            },
+            AppCmd::Recovery(rcmd) => match rcmd {
+                RecoveryCmd::List => {
+                    let log = crate::safety::QuarantineManager::read_recovery_log();
+                    if log.is_empty() {
+                        println!("No recovery history found.");
+                    } else {
+                        for entry in &log {
+                            let ts = entry.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+                            let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("");
+                            let path = entry.get("original_path").and_then(|v| v.as_str()).unwrap_or("");
+                            println!("{} | {} | {}", ts, action, path);
+                        }
+                    }
+                }
+                RecoveryCmd::Restore { original_path } => {
+                    let log = crate::safety::QuarantineManager::read_recovery_log();
+                    let entry = log.iter().find(|e| e.get("original_path").and_then(|v| v.as_str()) == Some(original_path.as_str()) && e.get("action").and_then(|v| v.as_str()) == Some("quarantined"));
+                    if let Some(entry) = entry {
+                        let quarantine_path = entry.get("quarantine_path").and_then(|v| v.as_str()).unwrap();
+                        if std::path::Path::new(quarantine_path).exists() {
+                            if let Some(parent) = std::path::Path::new(original_path).parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+                            match std::fs::rename(quarantine_path, original_path) {
+                                Ok(_) => println!("Restored {}", original_path),
+                                Err(e) => println!("Failed to restore: {}", e),
+                            }
+                        } else {
+                            println!("Quarantined file not found: {}", quarantine_path);
+                        }
+                    } else {
+                        println!("No quarantined entry found for {}", original_path);
+                    }
+                }
+            },
         }
         return;
     }

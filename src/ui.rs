@@ -223,8 +223,58 @@ pub fn scan_menu() {
     cli::run_with_args(args);
 }
 
+pub fn show_recovery_menu() {
+    use inquire::{Select, Text, Confirm};
+    use crate::safety::QuarantineManager;
+    let log = QuarantineManager::read_recovery_log();
+    let mut entries: Vec<String> = if log.is_empty() {
+        vec!["No recovery entries found.".to_string()]
+    } else {
+        log.iter().map(|entry| {
+            let ts = entry.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+            let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            let path = entry.get("original_path").and_then(|v| v.as_str()).unwrap_or("");
+            format!("{} | {} | {}", ts, action, path)
+        }).collect()
+    };
+    let choice = Select::new("Select a recovery entry to view/restore:", [&entries[..], &["Back".to_string()]].concat())
+        .prompt()
+        .unwrap_or_else(|_| "Back".to_string());
+    if choice == "Back" || choice == "No recovery entries found." {
+        return;
+    }
+    let idx = entries.iter().position(|s| s == &choice);
+    if let Some(i) = idx {
+        let entry = &log[i];
+        println!("\nEntry details:");
+        println!("Timestamp: {}", entry.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""));
+        println!("Action: {}", entry.get("action").and_then(|v| v.as_str()).unwrap_or(""));
+        println!("Original path: {}", entry.get("original_path").and_then(|v| v.as_str()).unwrap_or(""));
+        println!("Quarantine path: {}", entry.get("quarantine_path").and_then(|v| v.as_str()).unwrap_or(""));
+        println!("File size: {} bytes", entry.get("file_size").and_then(|v| v.as_u64()).unwrap_or(0));
+        let can_restore = entry.get("action").and_then(|v| v.as_str()) == Some("quarantined") &&
+            entry.get("quarantine_path").and_then(|v| v.as_str()).map(|qp| std::path::Path::new(qp).exists()).unwrap_or(false);
+        if can_restore {
+            if Confirm::new("Restore this file from quarantine?").with_default(false).prompt().unwrap_or(false) {
+                let quarantine_path = entry.get("quarantine_path").and_then(|v| v.as_str()).unwrap();
+                let original_path = entry.get("original_path").and_then(|v| v.as_str()).unwrap();
+                if let Some(parent) = std::path::Path::new(original_path).parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                match std::fs::rename(quarantine_path, original_path) {
+                    Ok(_) => println!("Restored {}", original_path),
+                    Err(e) => println!("Failed to restore: {}", e),
+                }
+            }
+        } else {
+            println!("This file cannot be restored (already deleted or not in quarantine).");
+        }
+        let _ = Text::new("Press Enter to return...").prompt();
+    }
+}
+
 pub fn main_menu() -> String {
-    let options = vec!["Scan for Duplicates", "Quarantine Operations", "Help", "Exit"];
+    let options = vec!["Scan for Duplicates", "Quarantine Operations", "Recovery", "Help", "Exit"];
     Select::new("What would you like to do?", options)
         .prompt()
         .map(|s| s.to_string())
