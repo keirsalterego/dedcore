@@ -1,6 +1,7 @@
 use std::{thread, time::Duration};
-use inquire::{Select, Text};
+use inquire::{Select, Text, Confirm};
 use crate::safety::QuarantineManager;
+use crate::cli;
 
 pub fn show_loading_screen() {
     // ANSI color codes
@@ -142,6 +143,84 @@ pub fn show_help_menu() {
     println!("  * Rollback: Restore quarantined files to their original locations.");
     println!("- For more info, see the README or project documentation.\n");
     let _ = Text::new("Press Enter to return to the main menu...").prompt();
+}
+
+pub fn scan_menu() {
+    // Path
+    let path = select_path();
+    if path.trim().is_empty() {
+        println!("No path provided. Aborting scan.");
+        return;
+    }
+    // Security
+    let security = select_security();
+    // Speed
+    let speed = select_speed();
+    // Filetypes
+    let filetypes = Text::new("Filter by filetypes (comma-separated, leave blank for all):")
+        .prompt()
+        .unwrap_or_default();
+    // Min size
+    let min_size = Text::new("Minimum file size in bytes (leave blank for none):")
+        .prompt()
+        .unwrap_or_default();
+    // Max size
+    let max_size = Text::new("Maximum file size in bytes (leave blank for none):")
+        .prompt()
+        .unwrap_or_default();
+    // Min age
+    let min_age = Text::new("Minimum file age in days (leave blank for none):")
+        .prompt()
+        .unwrap_or_default();
+    // Max age
+    let max_age = Text::new("Maximum file age in days (leave blank for none):")
+        .prompt()
+        .unwrap_or_default();
+    // Regex
+    let regex = Text::new("Regex filter for file paths (leave blank for none):")
+        .prompt()
+        .unwrap_or_default();
+    // Dry run
+    let dry_run = Confirm::new("Dry run (show what would happen, but make no changes)?")
+        .with_default(false)
+        .prompt()
+        .unwrap_or(false);
+    // Quarantine all duplicates
+    let quarantine_all = Confirm::new("Quarantine all duplicates (all but one per group) after scan?")
+        .with_default(false)
+        .prompt()
+        .unwrap_or(false);
+    // Build CLI args
+    let mut args = vec!["dedcore".to_string()];
+    args.push(path.clone());
+    args.push(format!("--security={}", security));
+    args.push(format!("--speed={}", speed));
+    if !filetypes.is_empty() {
+        args.push(format!("--filetypes={}", filetypes));
+    }
+    if !min_size.is_empty() {
+        args.push(format!("--min-size={}", min_size));
+    }
+    if !max_size.is_empty() {
+        args.push(format!("--max-size={}", max_size));
+    }
+    if !min_age.is_empty() {
+        args.push(format!("--min-age={}", min_age));
+    }
+    if !max_age.is_empty() {
+        args.push(format!("--max-age={}", max_age));
+    }
+    if !regex.is_empty() {
+        args.push(format!("--regex={}", regex));
+    }
+    if dry_run {
+        args.push("--dry".to_string());
+    }
+    if quarantine_all {
+        args.push("--quarantine-all-dupes".to_string());
+    }
+    // Call CLI logic with constructed args
+    cli::run_with_args(args);
 }
 
 pub fn main_menu() -> String {

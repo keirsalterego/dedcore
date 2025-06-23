@@ -12,7 +12,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use regex::Regex;
 use serde::Serialize;
 use inquire::Confirm;
+use inquire::Text as InquireText;
 use std::collections::HashMap;
+use chrono::Utc;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -41,6 +43,12 @@ pub struct App {
 
     #[command(subcommand)]
     pub command: Option<QuarantineCmd>,
+
+    #[arg(long, value_name = "PATH", help = "Path to save JSON report")]
+    pub json_report: Option<String>,
+
+    #[arg(long, value_name = "PATH", help = "Path to save HTML report")]
+    pub html_report: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -144,8 +152,12 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(root: P, exts: Option<&
     files
 }
 
-pub fn run() {
-    let app = App::parse();
+pub fn run_with_args<I, T>(args: I)
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let app = App::parse_from(args);
     // Parse security and speed from CLI
     let security = match app.security.to_lowercase().as_str() {
         "low" => Security::Low,
@@ -167,8 +179,6 @@ pub fn run() {
     let mut regex_filter: Option<Regex> = None;
     let mut dry_run = app.dry;
     let mut quarantine_dir: Option<String> = None;
-    let mut json_report: Option<String> = None;
-    let mut html_report: Option<String> = None;
     let mut safe_delete = false;
     let mut commit = false;
     let mut rollback = false;
@@ -202,12 +212,6 @@ pub fn run() {
         }
         if let Some(rest) = arg.strip_prefix("--quarantine-dir=") {
             quarantine_dir = Some(rest.to_string());
-        }
-        if let Some(rest) = arg.strip_prefix("--json-report=") {
-            json_report = Some(rest.to_string());
-        }
-        if let Some(rest) = arg.strip_prefix("--html-report=") {
-            html_report = Some(rest.to_string());
         }
         if arg == "--safe-delete" {
             safe_delete = true;
@@ -265,12 +269,6 @@ pub fn run() {
     if let Some(ref qdir) = quarantine_dir {
         println!("Quarantine directory: {}", qdir);
     }
-    if let Some(ref jpath) = json_report {
-        println!("JSON report: {}", jpath);
-    }
-    if let Some(ref hpath) = html_report {
-        println!("HTML report: {}", hpath);
-    }
     if safe_delete {
         println!("Safe delete mode: enabled");
     }
@@ -311,7 +309,7 @@ pub fn run() {
         .unwrap()
         .progress_chars("##-"));
     let mut results = Vec::with_capacity(files.len());
-    let mut report = Vec::with_capacity(files.len());
+    let mut report: Vec<FileHashReport> = Vec::with_capacity(files.len());
     let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
     for f in &files {
@@ -322,13 +320,11 @@ pub fn run() {
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
         results.push((f.to_string(), hash.clone()));
         hash_to_files.entry(hash.clone()).or_default().push(f.clone());
-        if json_report.is_some() || html_report.is_some() {
-            report.push(FileHashReport {
-                file: f.to_string(),
-                hash: hex::encode(hash),
-                algorithm: format!("{:?}", algo),
-            });
-        }
+        report.push(FileHashReport {
+            file: f.to_string(),
+            hash: hex::encode(hash),
+            algorithm: format!("{:?}", algo),
+        });
         if !ext.is_empty() {
             algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
         }
@@ -386,7 +382,7 @@ pub fn run() {
         }
     }
     
-    if let Some(ref jpath) = json_report {
+    if let Some(ref jpath) = app.json_report {
         if let Ok(json) = serde_json::to_string_pretty(&report) {
             if let Err(e) = fs::write(jpath, json) {
                 eprintln!("Failed to write JSON report: {}", e);
@@ -397,16 +393,67 @@ pub fn run() {
             eprintln!("Failed to serialize JSON report");
         }
     }
-    if let Some(ref hpath) = html_report {
+    if let Some(ref hpath) = app.html_report {
         let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
         for r in &report {
             html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
         }
         html.push_str("</table></body></html>");
         if let Err(e) = fs::write(hpath, html) {
-            eprintln!("Failed to write HTML report: {}", e);
+            eprintln!("Failed to write HTML report: {}", hpath);
         } else {
             println!("HTML report written to {}", hpath);
+        }
+    }
+    // Ask the user if they want to append the report after every scan
+    if Confirm::new("Would you like to append this scan to dedcore_report.json and dedcore_report.html?")
+        .with_default(true)
+        .prompt()
+        .unwrap_or(false)
+    {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        // JSON append
+        let json_path = "dedcore_report.json";
+        let mut all_scans = if let Ok(existing) = std::fs::read_to_string(json_path) {
+            serde_json::from_str::<serde_json::Value>(&existing).unwrap_or_else(|_| serde_json::json!([]))
+        } else {
+            serde_json::json!([])
+        };
+        let scan_entry = serde_json::json!({
+            "timestamp": timestamp,
+            "results": report,
+            "summary": {
+                "processed_files": results.len(),
+                "duplicate_groups": hash_to_files.values().filter(|&files| files.len() > 1).count(),
+            }
+        });
+        if let Some(arr) = all_scans.as_array_mut() {
+            arr.push(scan_entry);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&all_scans) {
+            if let Err(e) = std::fs::write(json_path, json) {
+                eprintln!("Failed to write dedcore_report.json: {}", e);
+            } else {
+                println!("Appended scan to dedcore_report.json");
+            }
+        }
+        // HTML append
+        let html_path = "dedcore_report.html";
+        let mut html = if let Ok(existing) = std::fs::read_to_string(html_path) {
+            existing
+        } else {
+            String::from("<html><head><title>dedcore Report</title></head><body>")
+        };
+        html.push_str(&format!("<h2>Scan at {}</h2>", timestamp));
+        html.push_str("<table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
+        for r in &report {
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
+        }
+        html.push_str("</table><br/>");
+        if let Err(e) = std::fs::write(html_path, html.clone()) {
+            eprintln!("Failed to write dedcore_report.html: {}", e);
+        } else {
+            println!("Appended scan to dedcore_report.html");
         }
     }
     println!("\nProcessed {} files.", results.len());
@@ -469,6 +516,10 @@ pub fn run() {
         }
         return;
     }
+}
+
+pub fn run() {
+    run_with_args(std::env::args());
 }
 
 pub fn run_with_ui(path: String, security: String, speed: String) {
