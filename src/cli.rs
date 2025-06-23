@@ -625,13 +625,13 @@ where
             !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1)
         })
         .collect();
-    let mut similar_image_groups: Vec<Vec<String>> = Vec::new();
-    let mut visited_images = std::collections::HashSet::new();
+    let mut similar_image_groups: Vec<Vec<(String, f32)>> = Vec::new();
+    let mut visited_images = std::collections::HashSet::<String>::new();
     let image_similarity_threshold = app.image_similarity_threshold.unwrap_or(0.9);
     let img_threshold = image_similarity_threshold;
     for (i, f1) in unique_image_files.iter().enumerate() {
         if visited_images.contains(*f1) { continue; }
-        let mut group = vec![(f1, f1, 1.0f32)];
+        let mut group = vec![(f1.to_string(), 1.0f32)];
         let hash1 = match crate::similarity::average_hash_image(std::path::Path::new(f1)) {
             Ok(h) => h,
             Err(_) => continue,
@@ -645,15 +645,15 @@ where
             let dist = crate::similarity::hamming_distance(hash1, hash2);
             let similarity = 1.0 - (dist as f32 / 64.0);
             if similarity >= img_threshold as f32 {
-                group.push((f1, f2, similarity));
-                visited_images.insert(*f2);
+                group.push(((*f2).clone(), similarity));
+                visited_images.insert((*f2).clone());
             }
         }
         if group.len() > 1 {
-            let group_files: Vec<String> = group.iter().map(|(_, f, _)| (**f).clone()).collect();
-            similar_image_groups.push(group_files);
-            for (_, f, _) in group {
-                visited_images.insert(*f);
+            let file_names: Vec<String> = group.iter().map(|(f, _)| f.clone()).collect();
+            similar_image_groups.push(group);
+            for f in file_names {
+                visited_images.insert(f);
             }
         }
     }
@@ -661,10 +661,51 @@ where
         println!("\n=== Similar Image File Groups (>= {:.0}% similar) ===", img_threshold * 100.0);
         for (i, group) in similar_image_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
-            for f in group {
-                println!("  {}", f);
+            for (f, sim) in group {
+                println!("  {} ({:.0}%)", f, sim * 100.0);
             }
             println!("");
+        }
+    }
+
+    // Add similar image groups to JSON/HTML reports if enabled
+    let similar_image_groups_for_report: Vec<Vec<serde_json::Value>> = similar_image_groups.iter().map(|group| {
+        group.iter().map(|(f, sim)| {
+            serde_json::json!({"file": f, "similarity": (sim * 100.0) as u8})
+        }).collect()
+    }).collect();
+    if let Some(ref jpath) = app.json_report {
+        let mut report_json = serde_json::to_value(&report).unwrap_or(serde_json::json!([]));
+        let mut obj = serde_json::Map::new();
+        obj.insert("file_hash_report".to_string(), report_json);
+        obj.insert("similar_image_groups".to_string(), serde_json::json!(similar_image_groups_for_report));
+        if let Err(e) = fs::write(jpath, serde_json::to_string_pretty(&obj).unwrap()) {
+            eprintln!("Failed to write JSON report: {}", e);
+        } else {
+            println!("JSON report written to {}", jpath);
+        }
+    }
+    if let Some(ref hpath) = app.html_report {
+        let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
+        for r in &report {
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
+        }
+        html.push_str("</table>");
+        if !similar_image_groups.is_empty() {
+            html.push_str("<h2>Similar Image File Groups</h2>");
+            for (i, group) in similar_image_groups.iter().enumerate() {
+                html.push_str(&format!("<b>Group {}</b><ul>", i + 1));
+                for (f, sim) in group {
+                    html.push_str(&format!("<li>{} ({:.0}%)</li>", f, sim * 100.0));
+                }
+                html.push_str("</ul>");
+            }
+        }
+        html.push_str("</body></html>");
+        if let Err(e) = fs::write(hpath, html) {
+            eprintln!("Failed to write HTML report: {}", hpath);
+        } else {
+            println!("HTML report written to {}", hpath);
         }
     }
 
