@@ -11,6 +11,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::time::{SystemTime, UNIX_EPOCH};
 use regex::Regex;
 use serde::Serialize;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +34,9 @@ pub struct App {
 
     #[arg(value_name = "TARGETS", required = true)]
     pub targets: Vec<String>,
+
+    #[command(subcommand)]
+    pub command: Option<QuarantineCmd>,
 }
 
 #[derive(Serialize)]
@@ -40,6 +44,18 @@ struct FileHashReport {
     file: String,
     hash: String,
     algorithm: String,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum QuarantineCmd {
+    /// Quarantine a file (move it to quarantine)
+    File {
+        #[arg(value_name = "FILE")] file: String,
+    },
+    /// Commit deletions (permanently delete quarantined files)
+    Commit,
+    /// Rollback quarantined files (restore them to original locations)
+    Rollback,
 }
 
 fn parse_size_arg(arg: &str) -> Option<u64> {
@@ -396,6 +412,33 @@ pub fn run() {
         for (ext, algo) in &algo_summary {
             println!("{:<12} | {}", ext, algo);
         }
+    }
+
+    if let Some(cmd) = &app.command {
+        match cmd {
+            QuarantineCmd::File { file } => {
+                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                match qm.quarantine_file(file) {
+                    Ok(_) => println!("File quarantined: {}", file),
+                    Err(e) => eprintln!("Failed to quarantine file: {}: {}", file, e),
+                }
+            }
+            QuarantineCmd::Commit => {
+                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                match qm.commit_deletions() {
+                    Ok(count) => println!("{} quarantined files permanently deleted.", count),
+                    Err(e) => eprintln!("Failed to commit deletions: {}", e),
+                }
+            }
+            QuarantineCmd::Rollback => {
+                let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                match qm.rollback() {
+                    Ok(count) => println!("{} quarantined files restored.", count),
+                    Err(e) => eprintln!("Failed to rollback quarantined files: {}", e),
+                }
+            }
+        }
+        return;
     }
 }
 
