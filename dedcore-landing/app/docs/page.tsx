@@ -1,26 +1,37 @@
 export default function DocsHome() {
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-green-400 mb-4">DedCore Documentation</h1>
-      <p className="mb-6 text-lg text-gray-200">
-        Welcome to the official DedCore documentation! Here you'll find everything you need to install, use, and master DedCore—the fastest, privacy-first file deduplication tool for creators and professionals.
+    <div className="prose dark:prose-invert mx-auto p-8">
+      <h1 className="text-green-400 text-4xl font-extrabold mb-4">Welcome to DedCore Docs</h1>
+      <p className="text-gray-300 text-lg mb-6">
+        Meet <b>DedCore</b>: the file deduplication tool that’s faster than your coffee break and more ruthless than your ex. Whether you’re a digital hoarder, a sysadmin, or just someone who can’t stop downloading cat memes, DedCore is here to save your disk space (and maybe your sanity).
       </p>
-      <h2 className="text-xl font-bold text-cyan-400 mt-8 mb-2">What is DedCore?</h2>
-      <p className="mb-4 text-gray-300">
-        DedCore is a blazing-fast, cross-platform tool that helps you find and remove duplicate files from your system, reclaiming storage space and keeping your digital life organized. It's designed for speed, safety, and simplicity, with all processing done locally for maximum privacy.
-      </p>
-      <h2 className="text-xl font-bold text-cyan-400 mt-8 mb-2">What's in this documentation?</h2>
-      <ul className="list-disc list-inside text-gray-300 mb-4">
-        <li><b>Installation:</b> How to install DedCore on any platform</li>
-        <li><b>Quick Start:</b> Get up and running in seconds</li>
-        <li><b>Features:</b> Deep scan, safe deletion, analytics, and more</li>
-        <li><b>Advanced Usage:</b> Custom rules, scripting, integrations</li>
-        <li><b>FAQ:</b> Answers to common questions</li>
-        <li><b>Changelog:</b> Latest updates and improvements</li>
-        <li><b>Contributing:</b> How to help and report issues</li>
-        <li><b>Contact/Support:</b> How to get help</li>
-      </ul>
-      <p className="text-gray-400">Use the sidebar to navigate through the sections. Let's get started!</p>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 mb-8">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">Why DedCore?</h2>
+        <ul className="list-disc list-inside text-gray-300 space-y-2">
+          <li>Lightning-fast duplicate detection (seriously, blink and you’ll miss it)</li>
+          <li>Safe deletion with quarantine (because we all make mistakes)</li>
+          <li>Detailed analytics and reports (for the data nerds)</li>
+          <li>Works on Linux, macOS, and Windows (no one’s left out)</li>
+          <li>CLI so slick, you’ll want to show it off at parties</li>
+        </ul>
+      </div>
+      <div className="flex flex-col md:flex-row gap-8 mb-8">
+        <div className="flex-1 bg-black border border-gray-700 rounded-lg p-6">
+          <h3 className="text-green-400 font-bold mb-2">What can you do here?</h3>
+          <ul className="list-disc list-inside text-gray-300 space-y-1">
+            <li>Learn how to install DedCore (it’s easy, we promise)</li>
+            <li>Get started in seconds with our Quick Start guide</li>
+            <li>Explore all the features (and some you didn’t know you needed)</li>
+            <li>Master advanced usage and automation</li>
+            <li>Find answers in the FAQ or contact support (we’re nice, mostly)</li>
+          </ul>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <img src="/vercel.svg" alt="DedCore Logo" className="w-32 h-32 mb-4" />
+          <span className="text-gray-400 text-sm">DedCore: Oops, no more duplicates!</span>
+        </div>
+      </div>
+      <p className="text-gray-400">Use the sidebar to navigate. Or just click around randomly. We won’t judge.</p>
     </div>
   );
-} 
+}
