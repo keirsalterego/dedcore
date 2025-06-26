@@ -98,11 +98,11 @@ export default function Features() {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
               <div>
-                <div className="text-2xl font-bold text-green-400 mb-1">10M+</div>
+                <div className="text-2xl font-bold text-green-400 mb-1">10T+</div>
                 <div className="text-gray-400 text-sm">Files Processed</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-cyan-400 mb-1">2.5TB</div>
+                <div className="text-2xl font-bold text-cyan-400 mb-1">25GB</div>
                 <div className="text-gray-400 text-sm">Space Recovered</div>
               </div>
               <div>
@@ -110,7 +110,7 @@ export default function Features() {
                 <div className="text-gray-400 text-sm">Accuracy Rate</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-white mb-1">50K+</div>
+                <div className="text-2xl font-bold text-white mb-1">100+</div>
                 <div className="text-gray-400 text-sm">Happy Users</div>
               </div>
             </div>
