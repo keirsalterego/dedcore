@@ -58,12 +58,13 @@ pub fn hamming_distance(a: u64, b: u64) -> u32 {
 }
 
 /// Compare two images. 1.0 = same, 0.0 = totally different. (Math is easy, results are magic.)
-pub fn compare_images(path1: &Path, path2: &Path) -> Result<f32> {
-    let hash1 = average_hash_image(path1)?;
-    let hash2 = average_hash_image(path2)?;
-    let dist = hamming_distance(hash1, hash2);
-    Ok(1.0 - (dist as f32 / 64.0))
-}
+
+// pub fn compare_images(path1: &Path, path2: &Path) -> Result<f32> {
+//     let hash1 = average_hash_image(path1)?;
+//     let hash2 = average_hash_image(path2)?;
+//     let dist = hamming_distance(hash1, hash2);
+//     Ok(1.0 - (dist as f32 / 64.0))
+// }
 
 #[cfg(test)]
 mod tests {

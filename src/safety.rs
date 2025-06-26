@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::fs;
-use tempfile::TempDir;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -18,15 +17,18 @@ pub struct QuarantineRecord {
 
 #[derive(Debug)]
 pub struct QuarantineManager {
-    temp_dir: TempDir,
     moved_files: HashMap<String, QuarantineRecord>,
     quarantine_log: PathBuf,
+    quarantine_dir: PathBuf,
 }
 
 impl QuarantineManager {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let temp_dir = tempfile::tempdir()?;
         let quarantine_log = QuarantineManager::get_quarantine_log_path();
+        let quarantine_dir = QuarantineManager::get_quarantine_dir_path();
+        if !quarantine_dir.exists() {
+            fs::create_dir_all(&quarantine_dir)?;
+        }
         let moved_files = if quarantine_log.exists() {
             let mut file = fs::File::open(&quarantine_log)?;
             let mut contents = String::new();
@@ -36,9 +38,9 @@ impl QuarantineManager {
             HashMap::new()
         };
         Ok(Self {
-            temp_dir,
             moved_files,
             quarantine_log,
+            quarantine_dir,
         })
     }
     
@@ -49,6 +51,12 @@ impl QuarantineManager {
             let _ = fs::create_dir_all(&dir);
         }
         dir.join("quarantine.json")
+    }
+    
+    fn get_quarantine_dir_path() -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let dir = home.join(".dedcore").join("quarantine");
+        dir
     }
     
     pub fn get_quarantine_stats(&self) -> (usize, u64) {
@@ -84,7 +92,7 @@ impl QuarantineManager {
                 .as_secs(),
             filename);
         
-        let quarantine_path = self.temp_dir.path().join(quarantine_name);
+        let quarantine_path = self.quarantine_dir.join(quarantine_name);
         
         // Move file to quarantine, robust to cross-device
         match fs::rename(&original_path, &quarantine_path) {
