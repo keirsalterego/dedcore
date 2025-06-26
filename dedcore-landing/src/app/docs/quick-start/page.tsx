@@ -1,4 +1,4 @@
-export default function DocsQuickStart() {
+export default function QuickStart() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-green-400 mb-4">Quick Start</h1>
@@ -28,5 +28,5 @@ Would you like to review and delete them? (y/N)</pre>
       </div>
       <p className="text-gray-400">For more advanced options, see the <a href="/docs/features" className="text-green-400 underline">Features</a> and <a href="/docs/advanced-usage" className="text-green-400 underline">Advanced Usage</a> sections.</p>
     </div>
-  )
+  );
 } 

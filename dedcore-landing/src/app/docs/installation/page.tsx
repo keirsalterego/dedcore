@@ -1,4 +1,4 @@
-export default function DocsInstallation() {
+export default function Installation() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-green-400 mb-4">Installation</h1>
@@ -24,5 +24,5 @@ export default function DocsInstallation() {
       </ul>
       <p className="text-gray-400">Need help? See the <a href="/docs/faq" className="text-cyan-400 underline">FAQ</a> or <a href="/docs/contact" className="text-cyan-400 underline">Contact Support</a>.</p>
     </div>
-  )
+  );
 } 

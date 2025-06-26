@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Menu, X, Download, Github, Mail } from "lucide-react"
+import Link from "next/link"
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -47,9 +48,9 @@ export default function Navbar() {
               <a href="#download" className="text-white/80 hover:text-white transition-colors text-sm font-medium">
                 Download
               </a>
-              <a href="#docs" className="text-white/80 hover:text-white transition-colors text-sm font-medium">
+              <Link href="/docs" className="text-white/80 hover:text-white transition-colors text-sm font-medium">
                 Docs
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -82,9 +83,9 @@ export default function Navbar() {
               <a href="#download" className="text-white/80 hover:text-white transition-colors text-sm">
                 Download
               </a>
-              <a href="#docs" className="text-white/80 hover:text-white transition-colors text-sm">
+              <Link href="/docs" className="text-white/80 hover:text-white transition-colors text-sm">
                 Docs
-              </a>
+              </Link>
               <div className="flex items-center space-x-4 pt-2">
                 <button className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors text-sm">
                   <Github size={16} />

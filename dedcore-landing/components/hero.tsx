@@ -111,7 +111,10 @@ export default function Hero() {
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <button className="flex items-center space-x-3 text-green-400 border border-green-400 hover:bg-green-400 hover:text-black px-6 py-3 rounded font-mono transition-colors">
+              <button
+                className="flex items-center space-x-3 text-green-400 border border-green-400 hover:bg-green-400 hover:text-black px-6 py-3 rounded font-mono transition-colors"
+                onClick={() => router.push("/docs")}
+              >
                 <span>[2] View Documentation</span>
               </button>
 
