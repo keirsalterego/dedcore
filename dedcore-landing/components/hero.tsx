@@ -2,11 +2,13 @@
 
 import { ArrowRight, Terminal, Zap, Shield } from "lucide-react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function Hero() {
   const [currentTime, setCurrentTime] = useState("")
   const [typedText, setTypedText] = useState("")
   const fullText = "oops no more duplicates"
+  const router = useRouter()
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -100,7 +102,10 @@ export default function Hero() {
             </div>
 
             <div className="ml-4 space-y-3">
-              <button className="group flex items-center space-x-3 text-black bg-green-400 hover:bg-green-300 px-6 py-3 rounded font-mono font-bold transition-colors">
+              <button
+                className="group flex items-center space-x-3 text-black bg-green-400 hover:bg-green-300 px-6 py-3 rounded font-mono font-bold transition-colors"
+                onClick={() => router.push("/#download")}
+              >
                 <Terminal size={20} />
                 <span>[1] Download Now</span>
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
