@@ -5,6 +5,10 @@ mod safety;
 mod ui;
 
 fn main() {
+    // Clear the terminal screen at program start
+    print!("\x1B[2J\x1B[1;1H");
+    use std::io::{Write, stdout};
+    stdout().flush().ok();
     ui::show_loading_screen();
     loop {
         let action = ui::main_menu();

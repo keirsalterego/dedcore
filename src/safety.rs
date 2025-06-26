@@ -121,16 +121,18 @@ impl QuarantineManager {
     pub fn commit_deletions(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut deleted_count = 0;
         let mut to_log = vec![];
-        for (_, record) in &self.moved_files {
+        self.moved_files.retain(|_k, record| {
             let quarantine_path = Path::new(&record.quarantine_path);
             if quarantine_path.exists() {
-                fs::remove_file(quarantine_path)?;
-                deleted_count += 1;
-                to_log.push(record.clone());
+                if let Ok(_) = fs::remove_file(quarantine_path) {
+                    deleted_count += 1;
+                    to_log.push(record.clone());
+                }
+                false // remove from log
+            } else {
+                false // remove missing from log too
             }
-        }
-        // TODO: Use retain for more efficient cleanup if needed in the future.
-        self.moved_files.clear();
+        });
         self.save_state()?;
         for rec in to_log {
             Self::log_recovery("deleted", &rec);
@@ -140,21 +142,32 @@ impl QuarantineManager {
     
     pub fn rollback(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut restored_count = 0;
-        
-        for (_, record) in &self.moved_files {
+        let mut missing = vec![];
+        self.moved_files.retain(|_k, record| {
             let quarantine_path = Path::new(&record.quarantine_path);
             let original_path = Path::new(&record.original_path);
-            
             if quarantine_path.exists() {
                 if let Some(parent) = original_path.parent() {
-                    fs::create_dir_all(parent)?;
+                    let _ = fs::create_dir_all(parent);
                 }
-                
-                fs::rename(quarantine_path, original_path)?;
-                restored_count += 1;
+                if let Ok(_) = fs::rename(quarantine_path, original_path) {
+                    restored_count += 1;
+                    false // remove from log
+                } else {
+                    true // keep in log if failed to restore
+                }
+            } else {
+                missing.push(record.original_path.clone());
+                false // remove missing from log
+            }
+        });
+        self.save_state()?;
+        if !missing.is_empty() {
+            println!("{} quarantined files were missing and could not be restored:", missing.len());
+            for m in missing {
+                println!("  {}", m);
             }
         }
-        
         Ok(restored_count)
     }
     

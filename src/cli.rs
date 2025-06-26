@@ -89,12 +89,7 @@ fn save_cache(path: &str, cache: &BTreeMap<String, FileHashCacheEntry>) {
 }
 
 fn clean_cache(cache: &mut BTreeMap<String, FileHashCacheEntry>) {
-    let files: Vec<String> = cache.keys().cloned().collect();
-    for f in files {
-        if !std::path::Path::new(&f).exists() {
-            cache.remove(&f);
-        }
-    }
+    cache.retain(|f, _| std::path::Path::new(f).exists());
 }
 
 #[derive(Serialize)]
@@ -132,86 +127,54 @@ pub enum RecoveryCmd {
     },
 }
 
-fn parse_size_arg(arg: &str) -> Option<u64> {
-    arg.parse::<u64>().ok()
-}
-
-fn parse_age_arg(arg: &str) -> Option<u64> {
-    arg.parse::<u64>().ok()
-}
-
-fn collect_files_recursively_with_filter<P: AsRef<Path>>(root: P, exts: Option<&Vec<String>>, min_size: Option<u64>, max_size: Option<u64>, min_age: Option<u64>, max_age: Option<u64>, regex_filter: Option<&Regex>) -> Vec<String> {
-    let mut files = Vec::new();
-    let debug = std::env::var("DEDCORE_DEBUG").ok().as_deref() == Some("1");
+fn collect_files_recursively_with_filter<P: AsRef<Path>>(
+    root: P,
+    exts: Option<&Vec<String>>,
+    min_size: Option<u64>,
+    max_size: Option<u64>,
+    min_age: Option<u64>,
+    max_age: Option<u64>,
+    regex_filter: Option<&Regex>,
+) -> Vec<String> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    let walker = walkdir::WalkDir::new(root).into_iter();
-    for entry in walker {
-        if let Ok(e) = entry {
-            if e.file_type().is_file() {
-                let meta = e.metadata().ok();
-                let size_ok = meta.as_ref().map(|m| {
-                    let len = m.len();
-                    (min_size.map_or(true, |min| len >= min)) && (max_size.map_or(true, |max| len <= max))
-                }).unwrap_or(false);
-                if !size_ok {
-                    if debug {
-                        println!("[DEBUG] Skipping file (size): {:?}", e.path());
-                    }
-                    continue;
-                }
-                let age_ok = meta.as_ref().map(|m| {
-                    if let Ok(modified) = m.modified() {
-                        if let Ok(modified_secs) = modified.duration_since(UNIX_EPOCH) {
-                            let age_secs = if now >= modified_secs.as_secs() {
-                                now - modified_secs.as_secs()
-                            } else {
-                                0 // treat future files as age 0 days
-                            };
-                            let age_days = age_secs / 86400;
-                            (min_age.map_or(true, |min| age_days >= min)) && (max_age.map_or(true, |max| age_days <= max))
-                        } else {
-                            true
-                        }
-                    } else {
-                        true
-                    }
-                }).unwrap_or(false);
-                if !age_ok {
-                    if debug {
-                        println!("[DEBUG] Skipping file (age): {:?}", e.path());
-                    }
-                    continue;
-                }
-                let path_str = e.path().to_string_lossy();
-                if let Some(re) = regex_filter {
-                    if !re.is_match(&path_str) {
-                        if debug {
-                            println!("[DEBUG] Skipping file (regex): {:?}", e.path());
-                        }
-                        continue;
-                    }
-                }
-                if let Some(exts) = exts {
-                    if let Some(ext) = e.path().extension().and_then(|s| s.to_str()) {
-                        if debug {
-                            println!("[DEBUG] Checking file: {:?}, ext: {:?}", e.path(), ext);
-                        }
-                        if exts.iter().any(|x| x.eq_ignore_ascii_case(ext)) {
-                            files.push(path_str.to_string());
-                        }
-                    } else if debug {
-                        println!("[DEBUG] Skipping file (no ext): {:?}", e.path());
-                    }
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            let meta = e.metadata().ok();
+            let size_ok = meta.as_ref().map(|m| {
+                let len = m.len();
+                (min_size.map_or(true, |min| len >= min)) && (max_size.map_or(true, |max| len <= max))
+            }).unwrap_or(false);
+            if !size_ok { return false; }
+            let age_ok = meta.as_ref().map(|m| {
+                if let Ok(modified) = m.modified() {
+                    if let Ok(modified_secs) = modified.duration_since(UNIX_EPOCH) {
+                        let age_secs = if now >= modified_secs.as_secs() {
+                            now - modified_secs.as_secs()
+                        } else { 0 };
+                        let age_days = age_secs / 86400;
+                        (min_age.map_or(true, |min| age_days >= min)) && (max_age.map_or(true, |max| age_days <= max))
+                    } else { true }
+                } else { true }
+            }).unwrap_or(false);
+            if !age_ok { return false; }
+            let path_str = e.path().to_string_lossy();
+            if let Some(re) = regex_filter {
+                if !re.is_match(&path_str) { return false; }
+            }
+            if let Some(exts) = exts {
+                if let Some(ext) = e.path().extension().and_then(|s| s.to_str()) {
+                    return exts.iter().any(|x| x.eq_ignore_ascii_case(ext));
                 } else {
-                    if debug {
-                        println!("[DEBUG] Including file: {:?}", e.path());
-                    }
-                    files.push(path_str.to_string());
+                    return false;
                 }
             }
-        }
-    }
-    files
+            true
+        })
+        .map(|e| e.path().to_string_lossy().to_string())
+        .collect()
 }
 
 pub fn run_with_args<I, T>(args: I)
@@ -250,16 +213,16 @@ where
             filetypes = Some(rest.split(',').map(|s| s.trim().to_string()).collect());
         }
         if let Some(rest) = arg.strip_prefix("--min-size=") {
-            min_size = parse_size_arg(rest);
+            min_size = Some(rest.parse::<u64>().unwrap());
         }
         if let Some(rest) = arg.strip_prefix("--max-size=") {
-            max_size = parse_size_arg(rest);
+            max_size = Some(rest.parse::<u64>().unwrap());
         }
         if let Some(rest) = arg.strip_prefix("--min-age=") {
-            min_age = parse_age_arg(rest);
+            min_age = Some(rest.parse::<u64>().unwrap());
         }
         if let Some(rest) = arg.strip_prefix("--max-age=") {
-            max_age = parse_age_arg(rest);
+            max_age = Some(rest.parse::<u64>().unwrap());
         }
         if let Some(rest) = arg.strip_prefix("--regex=") {
             if let Ok(re) = Regex::new(rest) {

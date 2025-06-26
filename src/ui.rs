@@ -37,8 +37,7 @@ pub fn show_quarantine_menu() {
             "Quarantine a File",
             "List Quarantined Files",
             "Commit Deletions",
-            "Restore All Quarantined Files",
-            "Rollback Quarantined Files",
+            "Rollback All Quarantined Files",
             "Back",
         ];
         let choice = Select::new("Quarantine Operations:", options.clone())
@@ -66,7 +65,14 @@ pub fn show_quarantine_menu() {
             }
             // Collect owned records to avoid borrow checker issues
             let files: Vec<_> = files_ref.iter().map(|rec| (*rec).clone()).collect();
-            let file_options: Vec<String> = files.iter().map(|rec| format!("{} ({} bytes)", rec.original_path, rec.file_size)).collect();
+            let file_options: Vec<String> = files.iter().map(|rec| {
+                let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
+                if quarantine_exists {
+                    format!("{} ({} bytes)", rec.original_path, rec.file_size)
+                } else {
+                    format!("{} (MISSING)", rec.original_path)
+                }
+            }).collect();
             let file_choice = Select::new("Select a file to manage:", [&file_options[..], &["Back".to_string()]].concat())
                 .prompt()
                 .unwrap_or_else(|_| "Back".to_string());
@@ -76,6 +82,7 @@ pub fn show_quarantine_menu() {
             let idx = file_options.iter().position(|s| s == &file_choice);
             if let Some(i) = idx {
                 let rec = &files[i];
+                let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
                 let action = Select::new(
                     &format!("What would you like to do with {}?", rec.original_path),
                     vec!["Restore (Rollback)", "Delete Permanently (Commit)", "Back"],
@@ -83,10 +90,9 @@ pub fn show_quarantine_menu() {
                 .prompt()
                 .unwrap_or_else(|_| "Back");
                 if action == "Restore (Rollback)" {
-                    // Restore just this file
-                    let quarantine_path = &rec.quarantine_path;
-                    let original_path = &rec.original_path;
-                    if std::path::Path::new(quarantine_path).exists() {
+                    if quarantine_exists {
+                        let quarantine_path = &rec.quarantine_path;
+                        let original_path = &rec.original_path;
                         if let Some(parent) = std::path::Path::new(original_path).parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }
@@ -94,25 +100,29 @@ pub fn show_quarantine_menu() {
                             Ok(_) => println!("Restored {}", original_path),
                             Err(e) => println!("Failed to restore {}: {}", original_path, e),
                         }
+                        // Remove from quarantine state
+                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let _ = qm2.remove_quarantined_file(original_path);
                     } else {
-                        println!("Quarantined file not found: {}", quarantine_path);
+                        println!("Quarantined file not found: {} (already missing)", rec.quarantine_path);
+                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let _ = qm2.remove_quarantined_file(&rec.original_path);
                     }
-                    // Remove from quarantine state
-                    let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
-                    let _ = qm2.remove_quarantined_file(original_path);
                 } else if action == "Delete Permanently (Commit)" {
-                    let quarantine_path = &rec.quarantine_path;
-                    if std::path::Path::new(quarantine_path).exists() {
+                    if quarantine_exists {
+                        let quarantine_path = &rec.quarantine_path;
                         match std::fs::remove_file(quarantine_path) {
                             Ok(_) => println!("Deleted {}", quarantine_path),
                             Err(e) => println!("Failed to delete {}: {}", quarantine_path, e),
                         }
+                        // Remove from quarantine state
+                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let _ = qm2.remove_quarantined_file(&rec.original_path);
                     } else {
-                        println!("Quarantined file not found: {}", quarantine_path);
+                        println!("Quarantined file not found: {} (already missing)", rec.quarantine_path);
+                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let _ = qm2.remove_quarantined_file(&rec.original_path);
                     }
-                    // Remove from quarantine state
-                    let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
-                    let _ = qm2.remove_quarantined_file(&rec.original_path);
                 } else {
                     continue;
                 }
@@ -123,17 +133,36 @@ pub fn show_quarantine_menu() {
                 Ok(count) => println!("{} quarantined files permanently deleted.", count),
                 Err(e) => println!("Failed to commit deletions: {}", e),
             }
-        } else if choice == "Restore All Quarantined Files" {
+        } else if choice == "Rollback All Quarantined Files" {
             let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
-            match qm.rollback() {
-                Ok(count) => println!("{} quarantined files restored to their original locations.", count),
-                Err(e) => println!("Failed to restore quarantined files: {}", e),
+            let mut missing = Vec::new();
+            let mut restored = 0;
+            for rec in qm.list_quarantined_files().into_iter().cloned().collect::<Vec<_>>() {
+                let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
+                if quarantine_exists {
+                    let quarantine_path = &rec.quarantine_path;
+                    let original_path = &rec.original_path;
+                    if let Some(parent) = std::path::Path::new(original_path).parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    match std::fs::rename(quarantine_path, original_path) {
+                        Ok(_) => {
+                            let _ = qm.remove_quarantined_file(original_path);
+                            restored += 1;
+                        },
+                        Err(e) => println!("Failed to restore {}: {}", original_path, e),
+                    }
+                } else {
+                    missing.push(rec.original_path.clone());
+                    let _ = qm.remove_quarantined_file(&rec.original_path);
+                }
             }
-        } else if choice == "Rollback Quarantined Files" {
-            let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
-            match qm.rollback() {
-                Ok(count) => println!("{} quarantined files restored.", count),
-                Err(e) => println!("Failed to rollback quarantined files: {}", e),
+            println!("{} quarantined files restored to their original locations.", restored);
+            if !missing.is_empty() {
+                println!("{} quarantined files were missing and could not be restored:", missing.len());
+                for m in missing {
+                    println!("  {}", m);
+                }
             }
         } else if choice == "Back" {
             break;
