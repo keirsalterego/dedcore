@@ -1,76 +1,85 @@
-import Image from "next/image";
 
 export default function CliDocs() {
   return (
     <div className="prose dark:prose-invert mx-auto p-8">
-      <h1 className="text-green-400 text-4xl font-extrabold mb-4">DedCore CLI: Features (No Boring Command Examples!)</h1>
+      <h1 className="text-green-400 text-4xl font-extrabold mb-4">DedCore CLI: Feature Reference</h1>
       <p className="text-gray-300 text-lg mb-8">
-        Welcome to the DedCore CLI feature showcase! Here’s everything this Rust-powered beast can do for you, explained in a way that even your cat could understand (if it cared about disk space).
+        Here’s what DedCore’s CLI actually does—no fluff, just the facts (with a side of sarcasm). If you want command syntax, check the other docs. If you want to know what’s possible, read on!
       </p>
 
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🚀 Deep Scan Technology</h2>
-        <p className="text-gray-300">DedCore doesn’t just look at file names or dates. It dives deep, comparing file contents byte-by-byte, so even if you renamed your embarrassing vacation photos, DedCore will find their twins. No duplicate escapes its gaze.</p>
+      {/* Core Deduplication */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🔍 Content-Based Duplicate Detection</h2>
+        <p className="text-gray-300">Scans files and finds true duplicates by hashing their contents (not just names or dates). Rename your files all you want—DedCore will still catch them.</p>
       </section>
 
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🗑️ Safe Deletion & Quarantine</h2>
-        <p className="text-gray-300">Worried about deleting the wrong file? DedCore’s quarantine system moves duplicates to a safe holding cell. You can review, restore, or unleash digital doom (delete) at your leisure. It’s like a recycling bin, but with more drama.</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">📊 Detailed Analytics</h2>
-        <p className="text-gray-300">Get juicy stats: how much space you saved, how many duplicates you had, and which file types are the worst offenders. DedCore gives you the numbers, so you can brag about your new free space at parties (or just to yourself).</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">⚙️ Customizable Rules</h2>
-        <p className="text-gray-300">Filter by file type, size, age, or even regex (for the true nerds). Want to only scan .mp3s bigger than 10MB and older than a year? Go wild. DedCore lets you slice and dice your scan however you want.</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🧬 Similarity Detection</h2>
-        <p className="text-gray-300">Not all duplicates are identical twins. DedCore can group files that are just <i>really</i> similar—like text files with a typo, or images with a different filter. You set the similarity threshold, DedCore does the detective work.</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">💾 Multi-Format Support</h2>
-        <p className="text-gray-300">Images, videos, documents, archives, spreadsheets, you name it—DedCore can scan it. If it’s a file, it’s fair game. (Except maybe your hopes and dreams. Those are safe. For now.)</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🌐 Cross-Platform</h2>
-        <p className="text-gray-300">Runs on Linux, macOS, and Windows. No matter what OS you use to hoard files, DedCore is there to help you clean up your act.</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">📦 Reporting (JSON & HTML)</h2>
-        <p className="text-gray-300">Want to keep a record of your heroic deduplication? DedCore can spit out beautiful HTML reports and nerdy JSON logs. Show your friends, your boss, or just your future self how much space you saved.</p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🔒 Safety First</h2>
-        <p className="text-gray-300">Every destructive action is double-checked. You’ll get prompts, confirmations, and a chance to back out before DedCore does anything drastic. (We’re not monsters.)</p>
-      </section>
-
-      <section className="mb-12">
+      {/* Hashing Algorithms */}
+      <section className="mb-10">
         <h2 className="text-cyan-400 text-2xl font-bold mb-2">🧠 Smart Hashing</h2>
-        <p className="text-gray-300">DedCore uses a mix of SHA-256, Blake3, and xxHash3, picking the best algorithm for your files and your paranoia level. Fast, secure, and just a little bit overkill.</p>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Uses SHA-256, Blake3, or xxHash3 (auto-selected for speed or paranoia).</li>
+          <li>Parallelized with Rayon for fast scanning.</li>
+        </ul>
       </section>
 
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🕵️ Recovery Log</h2>
-        <p className="text-gray-300">Every quarantine, deletion, and restoration is logged. If you ever need to know what happened (or who to blame), the recovery log has your back.</p>
+      {/* Filtering */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">⚙️ Advanced Filtering</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Filter by file type/extension, size range, age (days), or regex pattern.</li>
+          <li>Target specific files, folders, or wildcards.</li>
+        </ul>
       </section>
 
-      <section className="mb-12">
-        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🤖 Automation-Ready</h2>
-        <p className="text-gray-300">Script it, cron it, automate it! DedCore plays nice with batch jobs and shell scripts, so you can keep your system clean without lifting a finger (after the first time, anyway).</p>
+      {/* Similarity */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🧬 Similarity Detection</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Text: Groups files by content similarity (edit distance, adjustable threshold).</li>
+          <li>Images: Finds visually similar images using perceptual hashing.</li>
+        </ul>
+      </section>
+
+      {/* Quarantine & Safety */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🗑️ Safe Deletion & Quarantine</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Quarantine system: Moves files to a safe zone before deletion.</li>
+          <li>Restore or permanently delete quarantined files (with <b>commit</b> and <b>rollback</b> subcommands).</li>
+          <li>All destructive actions require confirmation. No accidental data loss (unless you try really hard).</li>
+        </ul>
+      </section>
+
+      {/* Reporting */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">📦 Reporting</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Generates JSON and HTML reports: see what was found, what was saved, and what was banished.</li>
+          <li>Reports include duplicate groups, similar files, and potential space savings.</li>
+        </ul>
+      </section>
+
+      {/* Recovery & Logging */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🕵️ Recovery & Audit Log</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Every quarantine, deletion, and restoration is logged for full traceability.</li>
+          <li>Recovery subcommand: List and restore from history if you change your mind (or your boss does).</li>
+        </ul>
+      </section>
+
+      {/* Automation & Platform */}
+      <section className="mb-10">
+        <h2 className="text-cyan-400 text-2xl font-bold mb-2">🤖 Automation & Platform Support</h2>
+        <ul className="list-disc list-inside text-gray-300">
+          <li>Script-friendly: Works in cron jobs, batch scripts, and CI/CD pipelines.</li>
+          <li>Cross-platform: Linux, macOS, Windows. (No excuses.)</li>
+        </ul>
       </section>
 
       <section className="mt-12">
-        <h2 className="text-cyan-400 text-xl font-bold mb-2">That’s DedCore CLI!</h2>
-        <p className="text-gray-300">If you want to see the actual commands, check the rest of the docs. Or just start typing and see what happens. What’s the worst that could go wrong? (Just kidding. Probably.)</p>
+        <h2 className="text-cyan-400 text-xl font-bold mb-2">That’s the CLI!</h2>
+        <p className="text-gray-300">For actual command usage, see the rest of the docs. For everything else, try <b>--help</b> and enjoy the snarky help messages.</p>
       </section>
     </div>
   );
