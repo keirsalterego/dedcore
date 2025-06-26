@@ -9,6 +9,7 @@ const sections = [
 	{ name: "Quick Start", href: "/docs/quick-start" },
 	{ name: "Features", href: "/docs/features" },
 	{ name: "Advanced Usage", href: "/docs/advanced-usage" },
+	{ name: "CLI Reference", href: "/docs/cli" },
 	{ name: "FAQ", href: "/docs/faq" },
 	{ name: "Changelog", href: "/docs/changelog" },
 	{ name: "Contributing", href: "/docs/contributing" },
