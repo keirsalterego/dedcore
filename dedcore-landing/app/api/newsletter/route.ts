@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Newsletter signup error:', error)
     
     // Check if it's a configuration error
-    if (error.message && error.message.includes('Missing Supabase environment variables')) {
+    if (error instanceof Error && error.message && error.message.includes('Missing Supabase environment variables')) {
       return NextResponse.json(
         { error: 'Newsletter service is not configured' },
         { status: 503 }

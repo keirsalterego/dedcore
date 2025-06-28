@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getEmailConfigStatus, verifyEmailConfig } from '@/lib/email'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const configStatus = getEmailConfigStatus()
     const isWorking = await verifyEmailConfig()
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       user: configStatus.user,
       from: configStatus.from
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Failed to check email status' },
       { status: 500 }

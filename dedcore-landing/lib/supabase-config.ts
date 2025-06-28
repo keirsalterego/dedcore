@@ -18,7 +18,7 @@ export function checkSupabaseConfig() {
 }
 
 // Safe Supabase client creation
-export function createSupabaseClient() {
+export async function createSupabaseClient() {
   const config = checkSupabaseConfig()
   
   if (!config.configured) {
@@ -26,6 +26,6 @@ export function createSupabaseClient() {
   }
 
   // Import here to avoid issues during build
-  const { createClient } = require('@supabase/supabase-js')
-  return createClient(config.url, config.key)
+  const { createClient } = await import('@supabase/supabase-js')
+  return createClient(config.url as string, config.key as string)
 } 

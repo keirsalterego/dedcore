@@ -30,9 +30,9 @@ export default function SubscribersPage() {
         } else {
           setError('Failed to fetch subscribers')
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Check if it's a configuration error
-        if (err.message && err.message.includes('Supabase is not configured')) {
+        if (err instanceof Error && err.message && err.message.includes('Supabase is not configured')) {
           setError('Supabase is not configured. Please set up your environment variables.')
         } else {
           setError('An error occurred while fetching subscribers')

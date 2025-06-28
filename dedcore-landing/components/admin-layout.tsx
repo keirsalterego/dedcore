@@ -10,11 +10,9 @@ import {
   LogOut, 
   Menu, 
   X,
-  Home,
   Mail,
   Activity,
-  Database,
-  Shield
+  Database
 } from 'lucide-react'
 import { logout, isAuthenticated } from '@/lib/auth'
 

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     // In production, validate the session token properly
     // For now, just check if it exists
     return NextResponse.json({ authenticated: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ authenticated: false })
   }
 } 

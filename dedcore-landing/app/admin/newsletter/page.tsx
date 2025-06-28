@@ -6,8 +6,6 @@ import {
   Mail, 
   Send, 
   Users, 
-  Eye, 
-  EyeOff,
   CheckCircle,
   AlertCircle,
   Loader2
@@ -77,7 +75,7 @@ export default function NewsletterPage() {
         setMessageType('error')
         setMessage(data.error || 'Failed to send newsletter')
       }
-    } catch (error) {
+    } catch {
       setMessageType('error')
       setMessage('Failed to send newsletter')
     } finally {
@@ -118,7 +116,7 @@ export default function NewsletterPage() {
         setMessageType('error')
         setMessage(data.error || 'Failed to send test email')
       }
-    } catch (error) {
+    } catch {
       setMessageType('error')
       setMessage('Failed to send test email')
     } finally {

@@ -34,8 +34,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Get active subscribers
-    const subscribers = await getActiveSubscribers()
-    const subscriberEmails = subscribers.map(s => s.email)
+    const subscribersResult = await getActiveSubscribers()
+    
+    if (!subscribersResult.success || !subscribersResult.data) {
+      return NextResponse.json(
+        { error: 'Failed to fetch subscribers' },
+        { status: 500 }
+      )
+    }
+    
+    const subscriberEmails = subscribersResult.data.map(s => s.email)
 
     if (subscriberEmails.length === 0) {
       return NextResponse.json(
@@ -61,7 +69,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

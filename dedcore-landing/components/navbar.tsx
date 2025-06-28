@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu, X, Download, Github, Mail } from "lucide-react"
+import { Menu, X, Github, Mail } from "lucide-react"
 import Link from "next/link"
 
 export default function Navbar() {
@@ -47,9 +47,9 @@ export default function Navbar() {
       } else {
         setError(data.error || 'Failed to subscribe. Please try again.')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Check if it's a configuration error
-      if (err.message && err.message.includes('Missing Supabase environment variables')) {
+      if (err instanceof Error && err.message && err.message.includes('Missing Supabase environment variables')) {
         setError('Newsletter feature is not configured. Please contact support.')
       } else {
         setError('Network error. Please check your connection and try again.')

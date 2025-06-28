@@ -55,9 +55,9 @@ export default function DatabasePage() {
           setStatus(prev => ({ ...prev, connected: false }))
           setError('Database connection failed')
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setStatus(prev => ({ ...prev, connected: false }))
-        if (err.message && err.message.includes('Supabase is not configured')) {
+        if (err instanceof Error && err.message && err.message.includes('Supabase is not configured')) {
           setError('Supabase is not configured')
         } else {
           setError('Database connection error')

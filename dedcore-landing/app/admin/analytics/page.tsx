@@ -135,8 +135,8 @@ export default function AnalyticsPage() {
         } else {
           setError('Failed to fetch analytics data')
         }
-      } catch (err: any) {
-        if (err.message && err.message.includes('Supabase is not configured')) {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message && err.message.includes('Supabase is not configured')) {
           setError('Supabase is not configured')
         } else {
           setError('An error occurred while fetching analytics')
