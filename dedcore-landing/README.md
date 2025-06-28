@@ -1,4 +1,13 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DedCore Landing Page
+
+This is a [Next.js](https://nextjs.org) project for the DedCore landing page, featuring a newsletter signup system integrated with Supabase.
+
+## Features
+
+- **Modern Landing Page**: Beautiful, responsive design with terminal-inspired UI
+- **Newsletter Signup**: Email collection system with Supabase backend
+- **Documentation**: Comprehensive docs section
+- **Interactive Elements**: 3D background and animations
 
 ## Getting Started
 
@@ -16,9 +25,42 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Newsletter Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The landing page includes a newsletter signup system that stores emails in Supabase. To set this up:
+
+1. **Follow the setup guide**: See [NEWSLETTER_SETUP.md](./NEWSLETTER_SETUP.md) for detailed instructions
+2. **Create a Supabase project**: Set up your database and get your credentials
+3. **Configure environment variables**: Add your Supabase URL and API key to `.env.local`
+4. **Run the database setup**: Execute the SQL script in `supabase-setup.sql`
+
+### Quick Setup
+
+1. Copy `.env.local.example` to `.env.local` and add your Supabase credentials
+2. Run the SQL script in your Supabase dashboard
+3. Test the signup form on your website
+
+## Admin Features
+
+- **Subscriber Management**: View all newsletter subscribers at `/admin/subscribers`
+- **Database Integration**: Direct Supabase integration for email storage
+- **Error Handling**: Comprehensive error handling and user feedback
+
+## Project Structure
+
+```
+dedcore-landing/
+├── app/                    # Next.js app directory
+│   ├── api/newsletter/     # Newsletter API endpoints
+│   ├── admin/              # Admin pages
+│   └── docs/               # Documentation pages
+├── components/             # React components
+├── lib/                    # Utility functions
+│   ├── supabase.ts         # Supabase client and functions
+│   └── utils.ts            # General utilities
+├── supabase-setup.sql      # Database setup script
+└── NEWSLETTER_SETUP.md     # Detailed setup guide
+```
 
 ## Learn More
 
