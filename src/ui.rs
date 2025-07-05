@@ -1,5 +1,5 @@
-use crate::cli;
 use crate::safety::QuarantineManager;
+use crate::cli;
 use inquire::{Confirm, Select, Text};
 use std::{thread, time::Duration};
 
@@ -65,7 +65,7 @@ pub fn show_quarantine_menu() {
                 Err(e) => println!("Failed to quarantine file: {}: {}", file, e),
             }
         } else if choice == "List Quarantined Files" {
-            let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+            let qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
             let files_ref = qm.list_quarantined_files();
             if files_ref.is_empty() {
                 println!("No files are currently quarantined.");

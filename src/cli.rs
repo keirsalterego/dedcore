@@ -1,17 +1,18 @@
 use crate::hashing::{HashConfig, Security, Speed};
 use crate::safety::QuarantineManager;
-use clap::{Parser, Subcommand};
+use crate::similarity::{
+    compare_images_with_algorithm, group_similar_text_files, text_similarity
+};
+use clap::{Parser, Subcommand, ValueEnum};
 use hex;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::Confirm;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir;
 // manish is dumb 
@@ -74,14 +75,37 @@ pub struct App {
         value_name = "FLOAT",
         help = "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8)"
     )]
-    pub similarity_threshold: Option<f64>,
+    /// Similarity threshold for text files (0.0 to 1.0)
+    /// Similarity threshold for text files (0.0 to 1.0)
+    #[arg(long, default_value_t = 0.8, value_parser = clap::value_parser!(f32), help = "Minimum similarity threshold for grouping text files (0.0 to 1.0, default: 0.8)")]
+    pub similarity_threshold: f32,
+
+    /// Image hashing algorithm to use
+    #[arg(long, value_enum, default_value_t = ImageHashAlgorithm::Combined)]
+    pub image_hash_algorithm: ImageHashAlgorithm,
 
     #[arg(
         long,
         value_name = "FLOAT",
+        default_value_t = 0.9,
+        value_parser = clap::value_parser!(f32),
         help = "Minimum similarity threshold for grouping similar images (0.0-1.0, default: 0.9)"
     )]
-    pub image_similarity_threshold: Option<f64>,
+    pub image_similarity_threshold: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ImageHashAlgorithm {
+    /// Average hash (fastest but less accurate)
+    Avg,
+    /// Perceptual hash (more accurate but slower)
+    Phash,
+    /// Difference hash (good balance of speed and accuracy)
+    Dhash,
+    /// Color hash (based on color distribution)
+    Color,
+    /// Combined approach (uses all hashes with weighted average)
+    Combined,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -367,6 +391,77 @@ where
         println!("Rollback mode: enabled");
     }
     println!("Files to process: {}\n", files.len());
+    // Check for text similarity if threshold is provided
+    let threshold = app.similarity_threshold;
+    if threshold < 0.0 || threshold > 1.0 {
+        eprintln!("Error: Similarity threshold must be between 0.0 and 1.0");
+        return;
+    }
+
+    println!("\n=== Analyzing text similarity (threshold: {:.2}) ===", threshold);
+    
+    // Filter text files
+    let text_files: Vec<String> = files.iter()
+        .filter(|f| {
+            let ext = Path::new(f).extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            matches!(ext.as_str(), "txt" | "md" | "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "h" | "hpp" | "html" | "css" | "json" | "toml" | "yaml" | "yml" | "xml" | "csv" | "log")
+        })
+        .cloned()
+        .collect();
+
+    if text_files.len() < 2 {
+        println!("Not enough text files for similarity analysis.");
+    } else {
+        match group_similar_text_files(&text_files, threshold as f32) {
+            Ok(groups) => {
+                if groups.is_empty() {
+                    println!("No similar text files found above the threshold.");
+                } else {
+                    println!("\n=== Found {} groups of similar text files ===", groups.len());
+                    for (i, group) in groups.iter().enumerate() {
+                        println!("\nGroup {} ({} files):", i + 1, group.len());
+                        for file in group {
+                            println!("  {}", file);
+                        }
+                        
+                        // Show similarity scores for the first few pairs in each group
+                            if group.len() > 1 {
+                                println!("  Similarity scores:");
+                                let reference = &group[0];
+                                for other in group.iter().skip(1).take(3) { // Limit to first 3 comparisons
+                                    if let Ok(similarity) = text_similarity(Path::new(reference), Path::new(other)) {
+                                        println!("    {} <-> {}: {:.1}%", 
+                                            Path::new(reference).file_name().unwrap_or_default().to_string_lossy(),
+                                            Path::new(other).file_name().unwrap_or_default().to_string_lossy(),
+                                            similarity * 100.0
+                                        );
+                                    }
+                                }
+                                if group.len() > 4 {
+                                    println!("    ... and {} more comparisons", group.len() - 2);
+                                }
+                            }
+                        }
+                        
+                    if dry_run {
+                        println!("\n[DRY RUN] Would have processed {} groups of similar text files.", groups.len());
+                        return;
+                    }
+                }
+            },
+            Err(e) => {
+                eprintln!("Error analyzing text similarity: {}", e);
+            }
+        }
+    }
+    
+    if dry_run {
+        println!("\n[DRY RUN] Text similarity analysis complete. No changes made.");
+        return;
+    }
     if dry_run {
         println!("[DRY RUN] The following files would be processed:");
         for f in &files {
@@ -711,7 +806,7 @@ where
     }
     let mut similar_groups: Vec<Vec<String>> = Vec::new();
     let mut visited = std::collections::HashSet::new();
-    let similarity_threshold = app.similarity_threshold.unwrap_or(0.8);
+    let similarity_threshold = app.similarity_threshold;
     // Use Rayon for parallel similarity if there are many files in a bucket
     for (_size, bucket) in text_buckets.iter() {
         if bucket.len() < 2 {
@@ -735,7 +830,7 @@ where
                     }
                     let dist = crate::similarity::levenshtein(&text1, &text2);
                     let similarity = 1.0 - (dist as f64 / max_len as f64);
-                    if similarity >= similarity_threshold {
+                    if similarity >= similarity_threshold as f64 {
                         Some((f1, f2))
                     } else {
                         None
@@ -756,7 +851,7 @@ where
                     }
                     let dist = crate::similarity::levenshtein(&text1, &text2);
                     let similarity = 1.0 - (dist as f64 / max_len as f64);
-                    if similarity >= similarity_threshold {
+                    if similarity >= similarity_threshold as f64 {
                         Some((f1, f2))
                     } else {
                         None
@@ -811,72 +906,49 @@ where
     }
     let mut similar_image_groups: Vec<Vec<(String, f32)>> = Vec::new();
     let mut visited_images = std::collections::HashSet::<String>::new();
-    let image_similarity_threshold = app.image_similarity_threshold.unwrap_or(0.9);
+    let image_similarity_threshold = app.image_similarity_threshold;
+    let algorithm = app.image_hash_algorithm;
+    
     for (_size, bucket) in image_buckets.iter() {
         if bucket.len() < 2 {
             continue;
         }
+        
         let pairs: Vec<_> = (0..bucket.len())
             .flat_map(|i| (i + 1..bucket.len()).map(move |j| (i, j)))
             .collect();
-        let results: Vec<_> = if bucket.len() > 20 {
+            
+        let results: Vec<(String, String, f32)> = if bucket.len() > 20 {
             use rayon::prelude::*;
             pairs
                 .par_iter()
-                .map(|&(i, j)| {
+                .filter_map(|&(i, j)| {
                     let f1 = bucket[i];
                     let f2 = bucket[j];
-                    let hash1 =
-                        crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
-                    let hash2 =
-                        crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
-                    match (hash1, hash2) {
-                        (Some(h1), Some(h2)) => {
-                            let dist = crate::similarity::hamming_distance(h1, h2);
-                            let similarity = 1.0 - (dist as f32 / 64.0);
-                            if similarity >= image_similarity_threshold as f32 {
-                                Some((f1, f2, similarity))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    }
+                    compare_images_with_algorithm(f1, f2, algorithm)
+                        .filter(|&sim| sim >= image_similarity_threshold)
+                        .map(|sim| (f1.to_string(), f2.to_string(), sim))
                 })
                 .collect()
         } else {
             pairs
                 .iter()
-                .map(|&(i, j)| {
+                .filter_map(|&(i, j)| {
                     let f1 = bucket[i];
                     let f2 = bucket[j];
-                    let hash1 =
-                        crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
-                    let hash2 =
-                        crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
-                    match (hash1, hash2) {
-                        (Some(h1), Some(h2)) => {
-                            let dist = crate::similarity::hamming_distance(h1, h2);
-                            let similarity = 1.0 - (dist as f32 / 64.0);
-                            if similarity >= image_similarity_threshold as f32 {
-                                Some((f1, f2, similarity))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    }
+                    compare_images_with_algorithm(f1, f2, algorithm)
+                        .filter(|&sim| sim >= image_similarity_threshold)
+                        .map(|sim| (f1.to_string(), f2.to_string(), sim))
                 })
                 .collect()
         };
-        for triple in results.into_iter().flatten() {
-            let (f1, f2, similarity) = triple;
-            if visited_images.contains(f1) || visited_images.contains(f2) {
+        for (f1, f2, similarity) in results.into_iter() {
+            if visited_images.contains(&f1) || visited_images.contains(&f2) {
                 continue;
             }
-            similar_image_groups.push(vec![(f1.to_string(), 1.0), (f2.to_string(), similarity)]);
-            visited_images.insert(f1.to_string());
-            visited_images.insert(f2.to_string());
+            similar_image_groups.push(vec![(f1.clone(), 1.0), (f2.clone(), similarity)]);
+            visited_images.insert(f1);
+            visited_images.insert(f2);
         }
     }
     if !similar_image_groups.is_empty() {
@@ -915,8 +987,8 @@ where
             "similar_image_groups".to_string(),
             serde_json::json!(similar_image_groups_for_report),
         );
-        if let Err(e) = fs::write(jpath, serde_json::to_string_pretty(&obj).unwrap()) {
-            eprintln!("Failed to write JSON report: {}", e);
+        if let Err(_e) = fs::write(jpath, serde_json::to_string_pretty(&obj).unwrap()) {
+            eprintln!("Failed to write JSON report");
         } else {
             println!("JSON report written to {}", jpath);
         }
