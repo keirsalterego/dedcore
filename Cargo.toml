@@ -30,3 +30,11 @@ chrono = "0.4"
 img_hash = "3.2.0"
 image = "0.25.6"
 memmap2 = "0.9"
+
+[profile.release]
+lto = true
+opt-level = "z"
+panic = "abort"
+codegen-units = 1
+strip = true
+# For even smaller binaries, you can also try 'opt-level = "z"' and 'strip = true' (Rust 1.60+)

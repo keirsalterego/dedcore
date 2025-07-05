@@ -1,7 +1,7 @@
-use std::{thread, time::Duration};
-use inquire::{Select, Text, Confirm};
-use crate::safety::QuarantineManager;
 use crate::cli;
+use crate::safety::QuarantineManager;
+use inquire::{Confirm, Select, Text};
+use std::{thread, time::Duration};
 
 pub fn show_loading_screen() {
     // ANSI color codes
@@ -9,7 +9,8 @@ pub fn show_loading_screen() {
     let yellow = "\x1b[33m";
     let green = "\x1b[32m";
     let reset = "\x1b[0m";
-    println!(r#"{cyan}
+    println!(
+        r#"{cyan}
 
       ██████╗ ███████╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗
       ██╔══██╗██╔════╝██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
@@ -17,9 +18,16 @@ pub fn show_loading_screen() {
       ██║  ██║██╔══╝  ██║  ██║██║     ██║   ██║██╔══██╗██╔══╝  
       ██████╔╝███████╗██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗ v 0.1.0
               DEDCORE
-{reset}"#, cyan=cyan, reset=reset);
-    println!("{yellow}dedcore: Oops, no more duplicates!{reset}\n", yellow=yellow, reset=reset);
-    print!("{green}Loading: [", green=green);
+{reset}"#,
+        cyan = cyan,
+        reset = reset
+    );
+    println!(
+        "{yellow}dedcore: Oops, no more duplicates!{reset}\n",
+        yellow = yellow,
+        reset = reset
+    );
+    print!("{green}Loading: [", green = green);
     use std::io::{Write, stdout};
     let mut out = stdout();
     for _ in 0..20 {
@@ -27,7 +35,7 @@ pub fn show_loading_screen() {
         out.flush().unwrap();
         thread::sleep(Duration::from_millis(30));
     }
-    println!("]{reset}\n", reset=reset);
+    println!("]{reset}\n", reset = reset);
     thread::sleep(Duration::from_millis(200));
 }
 
@@ -65,17 +73,23 @@ pub fn show_quarantine_menu() {
             }
             // Collect owned records to avoid borrow checker issues
             let files: Vec<_> = files_ref.iter().map(|rec| (*rec).clone()).collect();
-            let file_options: Vec<String> = files.iter().map(|rec| {
-                let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
-                if quarantine_exists {
-                    format!("{} ({} bytes)", rec.original_path, rec.file_size)
-                } else {
-                    format!("{} (MISSING)", rec.original_path)
-                }
-            }).collect();
-            let file_choice = Select::new("Select a file to manage:", [&file_options[..], &["Back".to_string()]].concat())
-                .prompt()
-                .unwrap_or_else(|_| "Back".to_string());
+            let file_options: Vec<String> = files
+                .iter()
+                .map(|rec| {
+                    let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
+                    if quarantine_exists {
+                        format!("{} ({} bytes)", rec.original_path, rec.file_size)
+                    } else {
+                        format!("{} (MISSING)", rec.original_path)
+                    }
+                })
+                .collect();
+            let file_choice = Select::new(
+                "Select a file to manage:",
+                [&file_options[..], &["Back".to_string()]].concat(),
+            )
+            .prompt()
+            .unwrap_or_else(|_| "Back".to_string());
             if file_choice == "Back" {
                 continue;
             }
@@ -101,11 +115,16 @@ pub fn show_quarantine_menu() {
                             Err(e) => println!("Failed to restore {}: {}", original_path, e),
                         }
                         // Remove from quarantine state
-                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let mut qm2 =
+                            QuarantineManager::new().expect("Failed to create QuarantineManager");
                         let _ = qm2.remove_quarantined_file(original_path);
                     } else {
-                        println!("Quarantined file not found: {} (already missing)", rec.quarantine_path);
-                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        println!(
+                            "Quarantined file not found: {} (already missing)",
+                            rec.quarantine_path
+                        );
+                        let mut qm2 =
+                            QuarantineManager::new().expect("Failed to create QuarantineManager");
                         let _ = qm2.remove_quarantined_file(&rec.original_path);
                     }
                 } else if action == "Delete Permanently (Commit)" {
@@ -116,11 +135,16 @@ pub fn show_quarantine_menu() {
                             Err(e) => println!("Failed to delete {}: {}", quarantine_path, e),
                         }
                         // Remove from quarantine state
-                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        let mut qm2 =
+                            QuarantineManager::new().expect("Failed to create QuarantineManager");
                         let _ = qm2.remove_quarantined_file(&rec.original_path);
                     } else {
-                        println!("Quarantined file not found: {} (already missing)", rec.quarantine_path);
-                        let mut qm2 = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                        println!(
+                            "Quarantined file not found: {} (already missing)",
+                            rec.quarantine_path
+                        );
+                        let mut qm2 =
+                            QuarantineManager::new().expect("Failed to create QuarantineManager");
                         let _ = qm2.remove_quarantined_file(&rec.original_path);
                     }
                 } else {
@@ -137,7 +161,12 @@ pub fn show_quarantine_menu() {
             let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
             let mut missing = Vec::new();
             let mut restored = 0;
-            for rec in qm.list_quarantined_files().into_iter().cloned().collect::<Vec<_>>() {
+            for rec in qm
+                .list_quarantined_files()
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>()
+            {
                 let quarantine_exists = std::path::Path::new(&rec.quarantine_path).exists();
                 if quarantine_exists {
                     let quarantine_path = &rec.quarantine_path;
@@ -149,7 +178,7 @@ pub fn show_quarantine_menu() {
                         Ok(_) => {
                             let _ = qm.remove_quarantined_file(original_path);
                             restored += 1;
-                        },
+                        }
                         Err(e) => println!("Failed to restore {}: {}", original_path, e),
                     }
                 } else {
@@ -157,9 +186,15 @@ pub fn show_quarantine_menu() {
                     let _ = qm.remove_quarantined_file(&rec.original_path);
                 }
             }
-            println!("{} quarantined files restored to their original locations.", restored);
+            println!(
+                "{} quarantined files restored to their original locations.",
+                restored
+            );
             if !missing.is_empty() {
-                println!("{} quarantined files were missing and could not be restored:", missing.len());
+                println!(
+                    "{} quarantined files were missing and could not be restored:",
+                    missing.len()
+                );
                 for m in missing {
                     println!("  {}", m);
                 }
@@ -194,10 +229,11 @@ pub fn scan_menu() {
     // Speed
     let speed = select_speed();
     // Filetypes
-    let filetypes = Text::new("File types to include (comma-separated, e.g. txt,jpg; leave blank for all):")
-        .with_placeholder("txt,jpg")
-        .prompt()
-        .unwrap_or_default();
+    let filetypes =
+        Text::new("File types to include (comma-separated, e.g. txt,jpg; leave blank for all):")
+            .with_placeholder("txt,jpg")
+            .prompt()
+            .unwrap_or_default();
     // Min size
     let min_size = Text::new("Minimum file size in bytes (leave blank for none):")
         .with_placeholder("0")
@@ -229,20 +265,25 @@ pub fn scan_menu() {
         .prompt()
         .unwrap_or(false);
     // Quarantine all duplicates
-    let quarantine_all = Confirm::new("Quarantine all duplicates (all but one per group) after scan?")
-        .with_default(false)
-        .prompt()
-        .unwrap_or(false);
+    let quarantine_all =
+        Confirm::new("Quarantine all duplicates (all but one per group) after scan?")
+            .with_default(false)
+            .prompt()
+            .unwrap_or(false);
     // Similarity threshold for text file grouping
-    let similarity_threshold = Text::new("Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8):")
-        .with_placeholder("0.8")
-        .prompt()
-        .unwrap_or_default();
+    let similarity_threshold = Text::new(
+        "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8):",
+    )
+    .with_placeholder("0.8")
+    .prompt()
+    .unwrap_or_default();
     // Similarity threshold for image file grouping
-    let image_similarity_threshold = Text::new("Minimum similarity threshold for grouping similar image files (0.0-1.0, default: 0.9):")
-        .with_placeholder("0.9")
-        .prompt()
-        .unwrap_or_default();
+    let image_similarity_threshold = Text::new(
+        "Minimum similarity threshold for grouping similar image files (0.0-1.0, default: 0.9):",
+    )
+    .with_placeholder("0.9")
+    .prompt()
+    .unwrap_or_default();
 
     // --- Pre-scan summary ---
     // This summary helps users catch mistakes before running a potentially expensive scan.
@@ -251,19 +292,42 @@ pub fn scan_menu() {
     println!("Path: {}", path);
     println!("Security: {}", security);
     println!("Speed: {}", speed);
-    if !filetypes.is_empty() { println!("File types: {}", filetypes); }
-    if !min_size.is_empty() { println!("Min size: {} bytes", min_size); }
-    if !max_size.is_empty() { println!("Max size: {} bytes", max_size); }
-    if !min_age.is_empty() { println!("Min age: {} days", min_age); }
-    if !max_age.is_empty() { println!("Max age: {} days", max_age); }
-    if !regex.is_empty() { println!("Regex: {}", regex); }
+    if !filetypes.is_empty() {
+        println!("File types: {}", filetypes);
+    }
+    if !min_size.is_empty() {
+        println!("Min size: {} bytes", min_size);
+    }
+    if !max_size.is_empty() {
+        println!("Max size: {} bytes", max_size);
+    }
+    if !min_age.is_empty() {
+        println!("Min age: {} days", min_age);
+    }
+    if !max_age.is_empty() {
+        println!("Max age: {} days", max_age);
+    }
+    if !regex.is_empty() {
+        println!("Regex: {}", regex);
+    }
     println!("Dry run: {}", if dry_run { "yes" } else { "no" });
-    println!("Quarantine all duplicates: {}", if quarantine_all { "yes" } else { "no" });
-    if !similarity_threshold.is_empty() { println!("Text similarity threshold: {}", similarity_threshold); }
-    if !image_similarity_threshold.is_empty() { println!("Image similarity threshold: {}", image_similarity_threshold); }
+    println!(
+        "Quarantine all duplicates: {}",
+        if quarantine_all { "yes" } else { "no" }
+    );
+    if !similarity_threshold.is_empty() {
+        println!("Text similarity threshold: {}", similarity_threshold);
+    }
+    if !image_similarity_threshold.is_empty() {
+        println!("Image similarity threshold: {}", image_similarity_threshold);
+    }
     println!("====================\n");
     // Confirm before running
-    if !Confirm::new("Proceed with scan?").with_default(true).prompt().unwrap_or(false) {
+    if !Confirm::new("Proceed with scan?")
+        .with_default(true)
+        .prompt()
+        .unwrap_or(false)
+    {
         println!("Scan cancelled.");
         return;
     }
@@ -301,7 +365,9 @@ pub fn scan_menu() {
             if val >= 0.0 && val <= 1.0 {
                 args.push(format!("--similarity-threshold={}", val));
             } else {
-                println!("Invalid similarity threshold, must be between 0.0 and 1.0. Using default (0.8).");
+                println!(
+                    "Invalid similarity threshold, must be between 0.0 and 1.0. Using default (0.8)."
+                );
             }
         } else {
             println!("Invalid similarity threshold input. Using default (0.8).");
@@ -312,7 +378,9 @@ pub fn scan_menu() {
             if val >= 0.0 && val <= 1.0 {
                 args.push(format!("--image-similarity-threshold={}", val));
             } else {
-                println!("Invalid image similarity threshold, must be between 0.0 and 1.0. Using default (0.9).");
+                println!(
+                    "Invalid image similarity threshold, must be between 0.0 and 1.0. Using default (0.9)."
+                );
             }
         } else {
             println!("Invalid image similarity threshold input. Using default (0.9).");
@@ -323,11 +391,24 @@ pub fn scan_menu() {
 }
 
 pub fn main_menu() -> String {
-    let options = vec!["Scan for Duplicates", "Quarantine Operations", "Help", "Exit"];
-    Select::new("What would you like to do?", options)
-        .prompt()
-        .map(|s| s.to_string())
-        .unwrap_or_else(|_| "Exit".to_string())
+    let options = vec![
+        "Scan for Duplicates",
+        "Quarantine Operations",
+        "Help",
+        "Sponsor Us",
+        "Exit",
+    ];
+    loop {
+        let choice = Select::new("What would you like to do?", options.clone())
+            .prompt()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|_| "Exit".to_string());
+        if choice == "Sponsor Us" {
+            show_sponsor_message();
+            continue;
+        }
+        return choice;
+    }
 }
 
 pub fn select_path() -> String {
@@ -350,4 +431,13 @@ pub fn select_speed() -> String {
         .prompt()
         .map(|s| s.to_string())
         .unwrap_or_else(|_| "balanced".to_string())
-} 
+}
+
+fn show_sponsor_message() {
+    println!("\n=== Sponsor DedCore ===");
+    println!("If you like this project, consider sponsoring us!");
+    println!("GitHub Sponsors: https://github.com/sponsors/yourusername");
+    println!("Or buy us a coffee: https://buymeacoffee.com/yourusername\n");
+    let _ = Text::new("Press Enter to return to the main menu...").prompt();
+}
+

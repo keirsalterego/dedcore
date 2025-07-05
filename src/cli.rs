@@ -1,20 +1,20 @@
-use std::path::PathBuf;
-use clap::{Parser, Subcommand};
 use crate::hashing::{HashConfig, Security, Speed};
 use crate::safety::QuarantineManager;
-use std::env;
+use clap::{Parser, Subcommand};
 use hex;
+use indicatif::{ProgressBar, ProgressStyle};
+use inquire::Confirm;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::Path;
-use walkdir;
-use indicatif::{ProgressBar, ProgressStyle};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use regex::Regex;
-use serde::{Serialize, Deserialize};
-use inquire::Confirm;
-use std::collections::HashMap;
-use std::collections::BTreeMap;
-
+use walkdir;
+// manish is dumb 
 #[derive(Subcommand, Debug)]
 pub enum AppCmd {
     #[command(subcommand)]
@@ -35,13 +35,26 @@ pub struct App {
     #[arg(short = 'p', long)]
     pub dir: Option<PathBuf>,
 
-    #[arg(long, value_name = "SECURITY", default_value = "high", help = "Hash security: low, medium, high, maximum")]
+    #[arg(
+        long,
+        value_name = "SECURITY",
+        default_value = "high",
+        help = "Hash security: low, medium, high, maximum"
+    )]
     pub security: String,
 
-    #[arg(long, value_name = "SPEED", default_value = "balanced", help = "Hash speed: fastest, balanced, mostsecure")]
+    #[arg(
+        long,
+        value_name = "SPEED",
+        default_value = "balanced",
+        help = "Hash speed: fastest, balanced, mostsecure"
+    )]
     pub speed: String,
 
-    #[arg(long, help = "Quarantine all duplicates (all but one per group) after scanning")]
+    #[arg(
+        long,
+        help = "Quarantine all duplicates (all but one per group) after scanning"
+    )]
     pub quarantine_all_dupes: bool,
 
     #[arg(value_name = "TARGETS", required = true)]
@@ -56,10 +69,18 @@ pub struct App {
     #[arg(long, value_name = "PATH", help = "Path to save HTML report")]
     pub html_report: Option<String>,
 
-    #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8)")]
+    #[arg(
+        long,
+        value_name = "FLOAT",
+        help = "Minimum similarity threshold for grouping similar text files (0.0-1.0, default: 0.8)"
+    )]
     pub similarity_threshold: Option<f64>,
 
-    #[arg(long, value_name = "FLOAT", help = "Minimum similarity threshold for grouping similar images (0.0-1.0, default: 0.9)")]
+    #[arg(
+        long,
+        value_name = "FLOAT",
+        help = "Minimum similarity threshold for grouping similar images (0.0-1.0, default: 0.9)"
+    )]
     pub image_similarity_threshold: Option<f64>,
 }
 
@@ -103,7 +124,8 @@ struct FileHashReport {
 pub enum QuarantineCmd {
     /// Quarantine a file (move it to quarantine)
     File {
-        #[arg(value_name = "FILE")] file: String,
+        #[arg(value_name = "FILE")]
+        file: String,
     },
     /// Commit deletions (permanently delete quarantined files)
     Commit,
@@ -113,7 +135,8 @@ pub enum QuarantineCmd {
     List,
     /// Restore a specific quarantined file by its original path
     Restore {
-        #[arg(value_name = "ORIGINAL_PATH")] original_path: String,
+        #[arg(value_name = "ORIGINAL_PATH")]
+        original_path: String,
     },
 }
 
@@ -123,7 +146,8 @@ pub enum RecoveryCmd {
     List,
     /// Restore a file from quarantine by original path
     Restore {
-        #[arg(value_name = "ORIGINAL_PATH")] original_path: String,
+        #[arg(value_name = "ORIGINAL_PATH")]
+        original_path: String,
     },
 }
 
@@ -136,33 +160,56 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(
     max_age: Option<u64>,
     regex_filter: Option<&Regex>,
 ) -> Vec<String> {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     walkdir::WalkDir::new(root)
         .into_iter()
         .filter_map(|entry| entry.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
             let meta = e.metadata().ok();
-            let size_ok = meta.as_ref().map(|m| {
-                let len = m.len();
-                (min_size.map_or(true, |min| len >= min)) && (max_size.map_or(true, |max| len <= max))
-            }).unwrap_or(false);
-            if !size_ok { return false; }
-            let age_ok = meta.as_ref().map(|m| {
-                if let Ok(modified) = m.modified() {
-                    if let Ok(modified_secs) = modified.duration_since(UNIX_EPOCH) {
-                        let age_secs = if now >= modified_secs.as_secs() {
-                            now - modified_secs.as_secs()
-                        } else { 0 };
-                        let age_days = age_secs / 86400;
-                        (min_age.map_or(true, |min| age_days >= min)) && (max_age.map_or(true, |max| age_days <= max))
-                    } else { true }
-                } else { true }
-            }).unwrap_or(false);
-            if !age_ok { return false; }
+            let size_ok = meta
+                .as_ref()
+                .map(|m| {
+                    let len = m.len();
+                    (min_size.map_or(true, |min| len >= min))
+                        && (max_size.map_or(true, |max| len <= max))
+                })
+                .unwrap_or(false);
+            if !size_ok {
+                return false;
+            }
+            let age_ok = meta
+                .as_ref()
+                .map(|m| {
+                    if let Ok(modified) = m.modified() {
+                        if let Ok(modified_secs) = modified.duration_since(UNIX_EPOCH) {
+                            let age_secs = if now >= modified_secs.as_secs() {
+                                now - modified_secs.as_secs()
+                            } else {
+                                0
+                            };
+                            let age_days = age_secs / 86400;
+                            (min_age.map_or(true, |min| age_days >= min))
+                                && (max_age.map_or(true, |max| age_days <= max))
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    }
+                })
+                .unwrap_or(false);
+            if !age_ok {
+                return false;
+            }
             let path_str = e.path().to_string_lossy();
             if let Some(re) = regex_filter {
-                if !re.is_match(&path_str) { return false; }
+                if !re.is_match(&path_str) {
+                    return false;
+                }
             }
             if let Some(exts) = exts {
                 if let Some(ext) = e.path().extension().and_then(|s| s.to_str()) {
@@ -252,7 +299,15 @@ where
     let scan_target;
     if app.targets.len() == 1 && Path::new(&app.targets[0]).is_dir() {
         scan_target = format!("directory: {}", app.targets[0]);
-        files = collect_files_recursively_with_filter(&app.targets[0], filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
+        files = collect_files_recursively_with_filter(
+            &app.targets[0],
+            filetypes.as_ref(),
+            min_size,
+            max_size,
+            min_age,
+            max_age,
+            regex_filter.as_ref(),
+        );
     } else if app.targets.len() == 1 && Path::new(&app.targets[0]).is_file() {
         scan_target = format!("file: {}", app.targets[0]);
         files.push(app.targets[0].clone());
@@ -262,7 +317,15 @@ where
             if Path::new(f).is_file() {
                 files.push(f.clone());
             } else if Path::new(f).is_dir() {
-                let mut dir_files = collect_files_recursively_with_filter(f, filetypes.as_ref(), min_size, max_size, min_age, max_age, regex_filter.as_ref());
+                let mut dir_files = collect_files_recursively_with_filter(
+                    f,
+                    filetypes.as_ref(),
+                    min_size,
+                    max_size,
+                    min_age,
+                    max_age,
+                    regex_filter.as_ref(),
+                );
                 files.append(&mut dir_files);
             }
         }
@@ -330,29 +393,44 @@ where
         return;
     }
     let pb = ProgressBar::new(files.len() as u64);
-    pb.set_style(ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-        .unwrap()
-        .progress_chars("##-"));
+    pb.set_style(
+        ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+            .unwrap()
+            .progress_chars("##-"),
+    );
     let mut cache = load_cache(".dedcore_cache.json");
     clean_cache(&mut cache);
     let mut results = Vec::with_capacity(files.len());
     let mut report: Vec<FileHashReport> = Vec::with_capacity(files.len());
-    let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut algo_summary: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
     let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
     let mut skipped = 0;
     for f in &files {
-        let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let ext = Path::new(f)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
         let algo = default_config.choose_algorithm(&ext);
         let meta = match std::fs::metadata(f) {
             Ok(m) => m,
             Err(_) => continue,
         };
         let size = meta.len();
-        let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         if let Some(entry) = cache.get(f) {
             if entry.size == size && entry.mtime == mtime {
                 skipped += 1;
-                hash_to_files.entry(entry.hash.clone()).or_default().push(f.clone());
+                hash_to_files
+                    .entry(entry.hash.clone())
+                    .or_default()
+                    .push(f.clone());
                 report.push(FileHashReport {
                     file: f.to_string(),
                     hash: hex::encode(&entry.hash),
@@ -362,28 +440,43 @@ where
             }
         }
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
-        cache.insert(f.clone(), FileHashCacheEntry { size, mtime, hash: hash.clone() });
+        cache.insert(
+            f.clone(),
+            FileHashCacheEntry {
+                size,
+                mtime,
+                hash: hash.clone(),
+            },
+        );
         results.push((f.to_string(), hash.clone()));
-        hash_to_files.entry(hash.clone()).or_default().push(f.clone());
+        hash_to_files
+            .entry(hash.clone())
+            .or_default()
+            .push(f.clone());
         report.push(FileHashReport {
             file: f.to_string(),
             hash: hex::encode(&hash),
             algorithm: format!("{:?}", algo),
         });
         if !ext.is_empty() {
-            algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
+            algo_summary
+                .entry(ext.clone())
+                .or_insert_with(|| format!("{:?}", algo));
         }
         pb.inc(1);
     }
     pb.finish_with_message("done");
     save_cache(".dedcore_cache.json", &cache);
     if skipped > 0 {
-        println!("Skipped {} unchanged files due to incremental scanning.", skipped);
+        println!(
+            "Skipped {} unchanged files due to incremental scanning.",
+            skipped
+        );
     }
-    
+
     if safe_delete {
         println!("\n=== Safe Delete Mode ===");
-        
+
         let mut quarantine = match QuarantineManager::new() {
             Ok(qm) => qm,
             Err(e) => {
@@ -391,7 +484,7 @@ where
                 return;
             }
         };
-        
+
         let mut quarantined_count = 0;
         for (file_path, _) in &results {
             if let Err(e) = quarantine.quarantine_file(file_path) {
@@ -400,11 +493,14 @@ where
                 quarantined_count += 1;
             }
         }
-        
+
         let (total_count, total_size) = quarantine.get_quarantine_stats();
-        println!("Quarantined {} files ({:.2} MB)", total_count, 
-                 total_size as f64 / 1024.0 / 1024.0);
-        
+        println!(
+            "Quarantined {} files ({:.2} MB)",
+            total_count,
+            total_size as f64 / 1024.0 / 1024.0
+        );
+
         if commit {
             println!("\n=== Committing Deletions ===");
             match quarantine.commit_deletions() {
@@ -430,7 +526,7 @@ where
             println!("Files are in quarantine. Use --commit to delete or --rollback to restore.");
         }
     }
-    
+
     if let Some(ref jpath) = app.json_report {
         if let Ok(json) = serde_json::to_string_pretty(&report) {
             if let Err(e) = fs::write(jpath, json) {
@@ -443,9 +539,14 @@ where
         }
     }
     if let Some(ref hpath) = app.html_report {
-        let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
+        let mut html = String::from(
+            "<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>",
+        );
         for r in &report {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                r.file, r.hash, r.algorithm
+            ));
         }
         html.push_str("</table></body></html>");
         if let Err(e) = fs::write(hpath, html) {
@@ -455,16 +556,19 @@ where
         }
     }
     // Ask the user if they want to append the report after every scan
-    if Confirm::new("Would you like to append this scan to dedcore_report.json and dedcore_report.html?")
-        .with_default(true)
-        .prompt()
-        .unwrap_or(false)
+    if Confirm::new(
+        "Would you like to append this scan to dedcore_report.json and dedcore_report.html?",
+    )
+    .with_default(true)
+    .prompt()
+    .unwrap_or(false)
     {
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         // JSON append
         let json_path = "dedcore_report.json";
         let mut all_scans = if let Ok(existing) = std::fs::read_to_string(json_path) {
-            serde_json::from_str::<serde_json::Value>(&existing).unwrap_or_else(|_| serde_json::json!([]))
+            serde_json::from_str::<serde_json::Value>(&existing)
+                .unwrap_or_else(|_| serde_json::json!([]))
         } else {
             serde_json::json!([])
         };
@@ -513,11 +617,17 @@ where
         html.push_str(&format!("<h2>Scan at {}</h2>", timestamp));
         html.push_str("<table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
         for r in &report {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                r.file, r.hash, r.algorithm
+            ));
         }
         html.push_str("</table><br/>");
         if potential_space_savings > 0 {
-            html.push_str(&format!("<p>Potential space savings: {:.2} MB</p>", potential_space_savings as f64 / 1024.0 / 1024.0));
+            html.push_str(&format!(
+                "<p>Potential space savings: {:.2} MB</p>",
+                potential_space_savings as f64 / 1024.0 / 1024.0
+            ));
         }
         if let Err(e) = std::fs::write(html_path, html.clone()) {
             eprintln!("Failed to write dedcore_report.html: {}", e);
@@ -553,7 +663,10 @@ where
         }
     }
     if potential_space_savings > 0 {
-        println!("Potential space savings: {:.2} MB", potential_space_savings as f64 / 1024.0 / 1024.0);
+        println!(
+            "Potential space savings: {:.2} MB",
+            potential_space_savings as f64 / 1024.0 / 1024.0
+        );
     }
 
     if app.quarantine_all_dupes && !duplicate_groups.is_empty() {
@@ -574,8 +687,11 @@ where
 
     // === Content Similarity for Text Files ===
     // Optimization: Bucket by file size to avoid O(n^2) on large sets
-    let text_exts = ["txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml"];
-    let mut text_buckets: std::collections::HashMap<u64, Vec<&String>> = std::collections::HashMap::new();
+    let text_exts = [
+        "txt", "md", "rs", "py", "toml", "json", "csv", "log", "cfg", "ini", "yaml", "yml",
+    ];
+    let mut text_buckets: std::collections::HashMap<u64, Vec<&String>> =
+        std::collections::HashMap::new();
     for f in files.iter().filter(|f| {
         let ext = std::path::Path::new(f)
             .extension()
@@ -585,7 +701,10 @@ where
         text_exts.contains(&ext.as_str())
     }) {
         // Only consider files not in any duplicate group
-        if !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1) {
+        if !hash_to_files
+            .values()
+            .any(|group| group.contains(f) && group.len() > 1)
+        {
             let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
             text_buckets.entry(size).or_default().push(f);
         }
@@ -595,54 +714,71 @@ where
     let similarity_threshold = app.similarity_threshold.unwrap_or(0.8);
     // Use Rayon for parallel similarity if there are many files in a bucket
     for (_size, bucket) in text_buckets.iter() {
-        if bucket.len() < 2 { continue; }
+        if bucket.len() < 2 {
+            continue;
+        }
         let pairs: Vec<_> = (0..bucket.len())
-            .flat_map(|i| (i+1..bucket.len()).map(move |j| (i, j)))
+            .flat_map(|i| (i + 1..bucket.len()).map(move |j| (i, j)))
             .collect();
         let results: Vec<_> = if bucket.len() > 20 {
             use rayon::prelude::*;
-            pairs.par_iter().map(|&(i, j)| {
-                let f1 = bucket[i];
-                let f2 = bucket[j];
-                let text1 = std::fs::read_to_string(f1).unwrap_or_default();
-                let text2 = std::fs::read_to_string(f2).unwrap_or_default();
-                let max_len = text1.len().max(text2.len());
-                if max_len == 0 { return None; }
-                let dist = crate::similarity::levenshtein(&text1, &text2);
-                let similarity = 1.0 - (dist as f64 / max_len as f64);
-                if similarity >= similarity_threshold {
-                    Some((f1, f2))
-                } else {
-                    None
-                }
-            }).collect()
+            pairs
+                .par_iter()
+                .map(|&(i, j)| {
+                    let f1 = bucket[i];
+                    let f2 = bucket[j];
+                    let text1 = std::fs::read_to_string(f1).unwrap_or_default();
+                    let text2 = std::fs::read_to_string(f2).unwrap_or_default();
+                    let max_len = text1.len().max(text2.len());
+                    if max_len == 0 {
+                        return None;
+                    }
+                    let dist = crate::similarity::levenshtein(&text1, &text2);
+                    let similarity = 1.0 - (dist as f64 / max_len as f64);
+                    if similarity >= similarity_threshold {
+                        Some((f1, f2))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         } else {
-            pairs.iter().map(|&(i, j)| {
-                let f1 = bucket[i];
-                let f2 = bucket[j];
-                let text1 = std::fs::read_to_string(f1).unwrap_or_default();
-                let text2 = std::fs::read_to_string(f2).unwrap_or_default();
-                let max_len = text1.len().max(text2.len());
-                if max_len == 0 { return None; }
-                let dist = crate::similarity::levenshtein(&text1, &text2);
-                let similarity = 1.0 - (dist as f64 / max_len as f64);
-                if similarity >= similarity_threshold {
-                    Some((f1, f2))
-                } else {
-                    None
-                }
-            }).collect()
+            pairs
+                .iter()
+                .map(|&(i, j)| {
+                    let f1 = bucket[i];
+                    let f2 = bucket[j];
+                    let text1 = std::fs::read_to_string(f1).unwrap_or_default();
+                    let text2 = std::fs::read_to_string(f2).unwrap_or_default();
+                    let max_len = text1.len().max(text2.len());
+                    if max_len == 0 {
+                        return None;
+                    }
+                    let dist = crate::similarity::levenshtein(&text1, &text2);
+                    let similarity = 1.0 - (dist as f64 / max_len as f64);
+                    if similarity >= similarity_threshold {
+                        Some((f1, f2))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         };
         for pair in results.into_iter().flatten() {
             let (f1, f2) = pair;
-            if visited.contains(f1) || visited.contains(f2) { continue; }
+            if visited.contains(f1) || visited.contains(f2) {
+                continue;
+            }
             similar_groups.push(vec![f1.to_string(), f2.to_string()]);
             visited.insert(f1);
             visited.insert(f2);
         }
     }
     if !similar_groups.is_empty() {
-        println!("\n=== Similar Text File Groups (>= {:.0}% similar) ===", similarity_threshold * 100.0);
+        println!(
+            "\n=== Similar Text File Groups (>= {:.0}% similar) ===",
+            similarity_threshold * 100.0
+        );
         for (i, group) in similar_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for f in group {
@@ -655,7 +791,8 @@ where
     // === Image Similarity for Image Files ===
     // Optimization: Bucket by file size to avoid O(n^2) on large sets
     let image_exts = ["jpg", "jpeg", "png", "bmp", "gif", "webp"];
-    let mut image_buckets: std::collections::HashMap<u64, Vec<&String>> = std::collections::HashMap::new();
+    let mut image_buckets: std::collections::HashMap<u64, Vec<&String>> =
+        std::collections::HashMap::new();
     for f in files.iter().filter(|f| {
         let ext = std::path::Path::new(f)
             .extension()
@@ -664,7 +801,10 @@ where
             .to_lowercase();
         image_exts.contains(&ext.as_str())
     }) {
-        if !hash_to_files.values().any(|group| group.contains(f) && group.len() > 1) {
+        if !hash_to_files
+            .values()
+            .any(|group| group.contains(f) && group.len() > 1)
+        {
             let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
             image_buckets.entry(size).or_default().push(f);
         }
@@ -673,60 +813,77 @@ where
     let mut visited_images = std::collections::HashSet::<String>::new();
     let image_similarity_threshold = app.image_similarity_threshold.unwrap_or(0.9);
     for (_size, bucket) in image_buckets.iter() {
-        if bucket.len() < 2 { continue; }
+        if bucket.len() < 2 {
+            continue;
+        }
         let pairs: Vec<_> = (0..bucket.len())
-            .flat_map(|i| (i+1..bucket.len()).map(move |j| (i, j)))
+            .flat_map(|i| (i + 1..bucket.len()).map(move |j| (i, j)))
             .collect();
         let results: Vec<_> = if bucket.len() > 20 {
             use rayon::prelude::*;
-            pairs.par_iter().map(|&(i, j)| {
-                let f1 = bucket[i];
-                let f2 = bucket[j];
-                let hash1 = crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
-                let hash2 = crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
-                match (hash1, hash2) {
-                    (Some(h1), Some(h2)) => {
-                        let dist = crate::similarity::hamming_distance(h1, h2);
-                        let similarity = 1.0 - (dist as f32 / 64.0);
-                        if similarity >= image_similarity_threshold as f32 {
-                            Some((f1, f2, similarity))
-                        } else {
-                            None
+            pairs
+                .par_iter()
+                .map(|&(i, j)| {
+                    let f1 = bucket[i];
+                    let f2 = bucket[j];
+                    let hash1 =
+                        crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
+                    let hash2 =
+                        crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
+                    match (hash1, hash2) {
+                        (Some(h1), Some(h2)) => {
+                            let dist = crate::similarity::hamming_distance(h1, h2);
+                            let similarity = 1.0 - (dist as f32 / 64.0);
+                            if similarity >= image_similarity_threshold as f32 {
+                                Some((f1, f2, similarity))
+                            } else {
+                                None
+                            }
                         }
-                    },
-                    _ => None
-                }
-            }).collect()
+                        _ => None,
+                    }
+                })
+                .collect()
         } else {
-            pairs.iter().map(|&(i, j)| {
-                let f1 = bucket[i];
-                let f2 = bucket[j];
-                let hash1 = crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
-                let hash2 = crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
-                match (hash1, hash2) {
-                    (Some(h1), Some(h2)) => {
-                        let dist = crate::similarity::hamming_distance(h1, h2);
-                        let similarity = 1.0 - (dist as f32 / 64.0);
-                        if similarity >= image_similarity_threshold as f32 {
-                            Some((f1, f2, similarity))
-                        } else {
-                            None
+            pairs
+                .iter()
+                .map(|&(i, j)| {
+                    let f1 = bucket[i];
+                    let f2 = bucket[j];
+                    let hash1 =
+                        crate::similarity::average_hash_image(std::path::Path::new(f1)).ok();
+                    let hash2 =
+                        crate::similarity::average_hash_image(std::path::Path::new(f2)).ok();
+                    match (hash1, hash2) {
+                        (Some(h1), Some(h2)) => {
+                            let dist = crate::similarity::hamming_distance(h1, h2);
+                            let similarity = 1.0 - (dist as f32 / 64.0);
+                            if similarity >= image_similarity_threshold as f32 {
+                                Some((f1, f2, similarity))
+                            } else {
+                                None
+                            }
                         }
-                    },
-                    _ => None
-                }
-            }).collect()
+                        _ => None,
+                    }
+                })
+                .collect()
         };
         for triple in results.into_iter().flatten() {
             let (f1, f2, similarity) = triple;
-            if visited_images.contains(f1) || visited_images.contains(f2) { continue; }
+            if visited_images.contains(f1) || visited_images.contains(f2) {
+                continue;
+            }
             similar_image_groups.push(vec![(f1.to_string(), 1.0), (f2.to_string(), similarity)]);
             visited_images.insert(f1.to_string());
             visited_images.insert(f2.to_string());
         }
     }
     if !similar_image_groups.is_empty() {
-        println!("\n=== Similar Image File Groups (>= {:.0}% similar) ===", image_similarity_threshold * 100.0);
+        println!(
+            "\n=== Similar Image File Groups (>= {:.0}% similar) ===",
+            image_similarity_threshold * 100.0
+        );
         for (i, group) in similar_image_groups.iter().enumerate() {
             println!("Group {}:", i + 1);
             for (f, sim) in group {
@@ -737,17 +894,27 @@ where
     }
 
     // Add similar image groups to JSON/HTML reports if enabled
-    let similar_image_groups_for_report: Vec<Vec<serde_json::Value>> = similar_image_groups.iter().map(|group| {
-        group.iter().map(|(f, sim)| {
-            serde_json::json!({"file": f, "similarity": (sim * 100.0) as u8})
-        }).collect()
-    }).collect();
+    let similar_image_groups_for_report: Vec<Vec<serde_json::Value>> = similar_image_groups
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .map(|(f, sim)| serde_json::json!({"file": f, "similarity": (sim * 100.0) as u8}))
+                .collect()
+        })
+        .collect();
     if let Some(ref jpath) = app.json_report {
         let mut report_json = serde_json::to_value(&report).unwrap_or(serde_json::json!([]));
         let mut obj = serde_json::Map::new();
         obj.insert("file_hash_report".to_string(), report_json);
-        obj.insert("duplicate_groups".to_string(), serde_json::json!(duplicate_groups));
-        obj.insert("similar_image_groups".to_string(), serde_json::json!(similar_image_groups_for_report));
+        obj.insert(
+            "duplicate_groups".to_string(),
+            serde_json::json!(duplicate_groups),
+        );
+        obj.insert(
+            "similar_image_groups".to_string(),
+            serde_json::json!(similar_image_groups_for_report),
+        );
         if let Err(e) = fs::write(jpath, serde_json::to_string_pretty(&obj).unwrap()) {
             eprintln!("Failed to write JSON report: {}", e);
         } else {
@@ -755,9 +922,14 @@ where
         }
     }
     if let Some(ref hpath) = app.html_report {
-        let mut html = String::from("<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>");
+        let mut html = String::from(
+            "<html><head><title>dedcore Report</title></head><body><h1>dedcore File Hash Report</h1><table border=1><tr><th>File</th><th>Hash</th><th>Algorithm</th></tr>",
+        );
         for r in &report {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", r.file, r.hash, r.algorithm));
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                r.file, r.hash, r.algorithm
+            ));
         }
         html.push_str("</table>");
         if !duplicate_groups.is_empty() {
@@ -792,21 +964,24 @@ where
         match cmd {
             AppCmd::Quarantine(qcmd) => match qcmd {
                 QuarantineCmd::File { file } => {
-                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let mut qm =
+                        QuarantineManager::new().expect("Failed to create QuarantineManager");
                     match qm.quarantine_file(file) {
                         Ok(_) => println!("File quarantined: {}", file),
                         Err(e) => eprintln!("Failed to quarantine file: {}: {}", file, e),
                     }
                 }
                 QuarantineCmd::Commit => {
-                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let mut qm =
+                        QuarantineManager::new().expect("Failed to create QuarantineManager");
                     match qm.commit_deletions() {
                         Ok(count) => println!("{} quarantined files permanently deleted.", count),
                         Err(e) => eprintln!("Failed to commit deletions: {}", e),
                     }
                 }
                 QuarantineCmd::Rollback => {
-                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let mut qm =
+                        QuarantineManager::new().expect("Failed to create QuarantineManager");
                     match qm.rollback() {
                         Ok(count) => println!("{} quarantined files restored.", count),
                         Err(e) => eprintln!("Failed to rollback quarantined files: {}", e),
@@ -825,7 +1000,8 @@ where
                     }
                 }
                 QuarantineCmd::Restore { original_path } => {
-                    let mut qm = QuarantineManager::new().expect("Failed to create QuarantineManager");
+                    let mut qm =
+                        QuarantineManager::new().expect("Failed to create QuarantineManager");
                     let files: Vec<_> = qm.list_quarantined_files().into_iter().cloned().collect();
                     let rec = files.iter().find(|rec| rec.original_path == *original_path);
                     if let Some(rec) = rec {
@@ -839,7 +1015,7 @@ where
                                 Ok(_) => {
                                     println!("Restored {}", original_path);
                                     let _ = qm.remove_quarantined_file(original_path);
-                                },
+                                }
                                 Err(e) => println!("Failed to restore {}: {}", original_path, e),
                             }
                         } else {
@@ -857,18 +1033,31 @@ where
                         println!("No recovery history found.");
                     } else {
                         for entry in &log {
-                            let ts = entry.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+                            let ts = entry
+                                .get("timestamp")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
                             let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("");
-                            let path = entry.get("original_path").and_then(|v| v.as_str()).unwrap_or("");
+                            let path = entry
+                                .get("original_path")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
                             println!("{} | {} | {}", ts, action, path);
                         }
                     }
                 }
                 RecoveryCmd::Restore { original_path } => {
                     let log = crate::safety::QuarantineManager::read_recovery_log();
-                    let entry = log.iter().find(|e| e.get("original_path").and_then(|v| v.as_str()) == Some(original_path.as_str()) && e.get("action").and_then(|v| v.as_str()) == Some("quarantined"));
+                    let entry = log.iter().find(|e| {
+                        e.get("original_path").and_then(|v| v.as_str())
+                            == Some(original_path.as_str())
+                            && e.get("action").and_then(|v| v.as_str()) == Some("quarantined")
+                    });
                     if let Some(entry) = entry {
-                        let quarantine_path = entry.get("quarantine_path").and_then(|v| v.as_str()).unwrap();
+                        let quarantine_path = entry
+                            .get("quarantine_path")
+                            .and_then(|v| v.as_str())
+                            .unwrap();
                         if std::path::Path::new(quarantine_path).exists() {
                             if let Some(parent) = std::path::Path::new(original_path).parent() {
                                 let _ = std::fs::create_dir_all(parent);
@@ -896,8 +1085,8 @@ pub fn run() {
 
 pub fn run_with_ui(path: String, security: String, speed: String) {
     use crate::hashing::{HashConfig, Security, Speed};
-    use std::path::Path;
     use regex::Regex;
+    use std::path::Path;
     let security = match security.to_lowercase().as_str() {
         "low" => Security::Low,
         "medium" => Security::Medium,
@@ -930,19 +1119,36 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
     println!("Scanning {}", scan_target);
     println!("Files to process: {}\n", files.len());
     let pb = indicatif::ProgressBar::new(files.len() as u64);
-    pb.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+    pb.set_style(
+        indicatif::ProgressStyle::with_template(
+            "[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}",
+        )
         .unwrap()
-        .progress_chars("##-"));
+        .progress_chars("##-"),
+    );
     let mut hash_to_files: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
-    let mut algo_summary: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut algo_summary: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
     for f in &files {
-        let ext = Path::new(f).extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let ext = Path::new(f)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
         let algo = default_policy.choose_algorithm(&ext);
-        println!("[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})", algo, f, ext, default_policy.security, default_policy.speed);
+        println!(
+            "[INFO] Using {:?} for '{}' (type: '{}', security: {:?}, speed: {:?})",
+            algo, f, ext, default_policy.security, default_policy.speed
+        );
         let hash = crate::hashing::hash_file(f, algo.clone()).unwrap_or_default();
-        hash_to_files.entry(hash.clone()).or_default().push(f.clone());
+        hash_to_files
+            .entry(hash.clone())
+            .or_default()
+            .push(f.clone());
         if !ext.is_empty() {
-            algo_summary.entry(ext.clone()).or_insert_with(|| format!("{:?}", algo));
+            algo_summary
+                .entry(ext.clone())
+                .or_insert_with(|| format!("{:?}", algo));
         }
         pb.inc(1);
     }
@@ -972,7 +1178,10 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
         }
     }
     if potential_space_savings > 0 {
-        println!("Potential space savings: {:.2} MB", potential_space_savings as f64 / 1024.0 / 1024.0);
+        println!(
+            "Potential space savings: {:.2} MB",
+            potential_space_savings as f64 / 1024.0 / 1024.0
+        );
     }
     if !duplicate_groups.is_empty() {
         println!("\nFound {} groups of duplicates.", duplicate_groups.len());
@@ -996,4 +1205,3 @@ pub fn run_with_ui(path: String, security: String, speed: String) {
         }
     }
 }
-
