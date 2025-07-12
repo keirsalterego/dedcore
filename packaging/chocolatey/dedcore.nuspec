@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>dedcore</id>
+    <version>0.1.0</version>
+    <title>dedcore - A high-performance deduplication tool</title>
+    <authors>Your Name</authors>
+    <owners>Your Name</owners>
+    <projectUrl>https://github.com/manishyoudumb/dedcore</projectUrl>
+    <licenseUrl>https://github.com/manishyoudumb/dedcore/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>dedcore is an intelligent CLI tool for finding and removing duplicate and similar files.</description>
+    <summary>A high-performance deduplication tool with support for multiple hashing algorithms and parallel processing.</summary>
+    <releaseNotes>Initial release</releaseNotes>
+    <tags>deduplication cli rust filesystem</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

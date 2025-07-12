@@ -452,6 +452,7 @@ fn apply_dct_2d(matrix: &[f64], size: usize) -> Vec<f64> {
 ///
 /// # Note
 /// Uses a combination of perceptual hashing for comparison.
+#[allow(dead_code)]
 pub fn compare_images(path1: &Path, path2: &Path) -> Result<f32> {
     let sig1 = generate_image_signature(path1)?;
     let sig2 = generate_image_signature(path2)?;
@@ -544,13 +545,12 @@ pub fn compare_images_with_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
     
     fn create_test_file(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
         file
     }
     

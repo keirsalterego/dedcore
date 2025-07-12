@@ -1,8 +1,7 @@
-mod cli;
-mod hashing;
-mod similarity;
-mod safety;
-mod ui;
+// Import from the library crate
+use dedcore::*;
+
+mod ui;  // Keep UI in the binary
 
 fn main() {
     // Clear the terminal screen at program start

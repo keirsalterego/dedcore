@@ -1,71 +1,180 @@
-# dedcore
+<div align="center">
 
-**Oops, no more duplicates!**
-
----
-
-<p align="center">
-  <img src="https://img.shields.io/badge/deduplication-awesome-brightgreen" alt="deduplication badge" />
-  <img src="https://img.shields.io/badge/rust-🦀-orange" alt="rust badge" />
-  <img src="https://img.shields.io/badge/cli-cool-blue" alt="cli badge" />
-</p>
-
-## 🚀 About
-
-dedcore is an intelligent CLI tool and Rust crate for finding and removing duplicate and similar files. It aims to provide a robust, safe, and feature-rich deduplication experience for power users and professionals.
-
----
-
-## 🗺️ Roadmap & Features
-
-### Core Features
-- ✅ **Multi-Algorithm Hashing:** SHA-256, Blake3, and xxHash for different use cases
-- ✅ **Parallel Processing:** Rayon-based parallel file processing with progress tracking
-- ✅ **Advanced Filtering:** Size ranges, file types, date ranges, regex patterns
-- ✅ **Safe Operations:** Quarantine system before actual deletion
-- ✅ **Detailed Reports:** JSON/HTML reports with file relationships and savings
-- ✅ **Text Similarity:** Find similar text files using Levenshtein distance algorithm
-
-### Advanced Features
-- ✅ **Content Similarity:** Compare text files using edit distance algorithms
-- ✅ **Image Similarity:** Perceptual hashing for images using image crate
-- ✅ **Incremental Scanning:** Only scan changed files using modification times and checksums
-- ✅ **Recovery System:** Maintain deletion history with rollback capabilities
-- ✅ **Space Analysis:** Detailed breakdown of potential space savings (basic)
-
-### Advanced Challenges
-- ❌ **Sophisticated Grouping:** Group similar files by content, not just exact matches
-- ✅ **Performance Optimization:** Memory-mapped files, efficient hash computation
-- ❌ **Advanced Verification:** Multiple verification passes before deletion
-- ❌ **Metadata Analysis:** Consider file attributes, EXIF data for better deduplication
-- ❌ **Custom Algorithms:** Implement domain-specific similarity detection
-
----
-
-## 📦 Installation
-
-```bash
-# Installation instructions coming soon
+```
+ ██████╗███████╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗
+██╔════╝██╔════╝██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
+██║     █████╗  ██║  ██║██║     ██║   ██║██████╔╝█████╗  
+██║     ██╔══╝  ██║  ██║██║     ██║   ██║██╔══██╗██╔══╝  
+╚██████╗███████╗██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗
+ ╚═════╝╚══════╝╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 ```
 
-## 🛠️ Usage
 
-### Basic Usage
+<!-- ██████╗ 
+██╔══██╗
+██║  ██║
+██║  ██║
+██████╔╝
+╚═════╝   -->
+# DedCore: Because Your Storage Space Deserves Better
+
+> *"I'm not saying you have a hoarding problem, but your hard drive called..."*
+
+[![Crates.io](https://img.shields.io/crates/v/dedcore?style=for-the-badge&logo=rust&color=orange)](https://crates.io/crates/dedcore)
+[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen?style=for-the-badge&logo=read-the-docs)](https://docs.rs/dedcore/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/manishyoudumb/dedcore/rust.yml?branch=main&style=for-the-badge&logo=github-actions)](https://github.com/manishyoudumb/dedcore/actions)
+[![codecov](https://img.shields.io/codecov/c/github/manishyoudumb/dedcore?style=for-the-badge&logo=codecov&token=YOUR_TOKEN_HERE)](https://codecov.io/gh/manishyoudumb/dedcore)
+[![Dependency Status](https://deps.rs/repo/github/manishyoudumb/dedcore/status.svg?style=for-the-badge)](https://deps.rs/repo/github/manishyoudumb/dedcore)
+[![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/manishyoudumb/dedcore)
+[![Downloads](https://img.shields.io/crates/d/dedcore?style=for-the-badge&logo=rust)](https://crates.io/crates/dedcore)
+[![Discord](https://img.shields.io/discord/your-discord-server?style=for-the-badge&logo=discord&color=7289DA)](https://discord.gg/your-invite-link)
+[![Twitter Follow](https://img.shields.io/twitter/follow/your-twitter?style=for-the-badge&logo=twitter&color=1DA1F2)](https://twitter.com/your-twitter)
+
+</div>
+
+## 🚀 Features That Won't Make You Cry
+
+<div align="center">
+
+[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Performance](https://img.shields.io/badge/performance-%20%20%20%20%20%20%20%20-9cf?style=for-the-badge&logo=rust&logoColor=white)]()
+[![Security](https://img.shields.io/badge/security-100%25-brightgreen?style=for-the-badge&logo=securityscorecard&logoColor=white)]()
+[![Easy to Use](https://img.shields.io/badge/easy%20to%20use-%E2%9C%94%EF%B8%8F-brightgreen?style=for-the-badge)]()
+
+</div>
+
+### Core Superpowers
+- 🦸 **Multi-Algorithm Hashing**: SHA-256, Blake3, and xxHash walk into a bar... your files don't stand a chance
+- ⚡ **Parallel Processing**: Because watching paint dry is only fun the first 10,000 times
+- 🎯 **Smart Filtering**: Size, type, age, regex - because not all files are created equal (but some are exactly equal)
+- 🛡️ **Safe Mode**: Quarantine before delete - like a witness protection program for your files
+- 📊 **Fancy Reports**: JSON/HTML reports so detailed they make your cat photos jealous
+
+### Advanced Magic
+- 🔍 **Text Similarity**: Finds files that are suspiciously similar (great for finding that essay you rewrote 14 times)
+- 🖼️ **Image Dedupe**: Because you don't need 37 copies of the same cat picture (or do you?)
+- ⏱️ **Incremental Scans**: Only checks what's changed - like a detective who's good at their job
+- ⏮️ **Undo Button**: Because sometimes you DO need that 14th copy of the cat picture
+- 💾 **Space Analysis**: Shows you exactly how much space you'll save (spoiler: it's never enough)
+
+---
+
+## 🛠️ Installation: Choose Your Own Adventure
+
+<div align="center">
+
+[![Cargo Install](https://img.shields.io/badge/cargo%20install-dedcore-orange?style=for-the-badge&logo=rust&logoColor=white)]()
+[![AUR](https://img.shields.io/aur/version/dedcore?color=1793D1&label=AUR&logo=arch-linux&style=for-the-badge)]()
+[![Homebrew](https://img.shields.io/badge/homebrew-install-555555?style=for-the-badge&logo=homebrew)]()
+
+</div>
+
+### The "I Trust Random Internet Code" Method (Recommended)
+```bash
+# Install via cargo (requires Rust toolchain)
+cargo install dedcore
+
+# Add to PATH (because typing the full path is so 1990s)
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+source ~/.bashrc  # or restart your terminal
+```
+
+### The "I Like to Live Dangerously" Method
+```bash
+# Build from source (for the truly brave)
+git clone https://github.com/manishyoudumb/dedcore.git
+cd dedcore
+cargo build --release
+# The binary is now in ./target/release/dedcore
+```
+
+### The "I Use Arch BTW" Method
+```bash
+yay -S dedcore  # Coming soon to an AUR near you!
+```
+
+---
+
+## 🎯 Usage: It's Like Magic, But With More Buttons
+
+### Getting Started
+Just run `dedcore` in your terminal and let the beautiful TUI guide you through the process:
 
 ```bash
-# Find and group similar text files (threshold: 0.8 = 80% similarity)
-dedcore --similarity-threshold 0.8 /path/to/text/files
-
-# Find similar text files with a higher threshold (more strict matching)
-dedcore --similarity-threshold 0.9 /path/to/text/files
-
-# Process only specific file types
-dedcore --filetypes=txt,md,rs --similarity-threshold 0.8 /path/to/files
+dedcore
 ```
+
+### What to Expect
+1. **Main Menu**: Choose between scanning for duplicates, managing quarantined files, or getting help
+2. **Interactive Scanning**:
+   - Select directories to scan
+   - Choose file types to include or exclude
+   - Set similarity thresholds with easy sliders
+   - Preview results before taking any action
+3. **Quarantine Management**:
+   - Review and manage quarantined files
+   - Restore files if you change your mind
+   - Permanently delete when you're ready
+
+### Pro Tips
+- Use arrow keys to navigate
+- Press `Tab` to switch between elements
+- `Enter` selects the highlighted option
+- `Esc` or `q` to go back/exit
+
+---
+
+## 🚧 Upcoming Features (AKA The "We're Working On It" Section)
+
+### Coming Soon™
+- 🤖 **AI-Powered Dedupe**: Because sometimes only AI can understand why you have 37 versions of the same document
+- 🌐 **Cloud Integration**: Because the cloud is just someone else's computer
+- 📱 **Mobile App**: For when you need to dedupe on the go (we don't judge)
+- 🎨 **Better UI**: Because terminal colors are nice, but have you seen gradients?
+
+### Future Dreams (AKA The "Maybe One Day" List)
+- 🔮 **Predictive Dedupe**: Knows what you're going to duplicate before you do
+- 🧠 **Blockchain Integration**: Because why not make deduplication 1000x slower?
+- 🤖 **Robot Butler**: Optional feature that also makes you coffee (batteries not included)
+
+---
+
+## 🤝 Contributing
+
+Found a bug? Have a feature request? Want to make fun of our code? We'd love to hear from you!
+
+1. Fork it (please be gentle)
+2. Create your feature branch (`git checkout -b feature/amazing`)
+3. Commit your changes (`git commit -am 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing`)
+5. Open a Pull Request (and pray to the merge gods)
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+
+*Disclaimer: We're not responsible for any existential crises caused by realizing how many duplicate files you actually have.*
+
+---
+
+## 💖 Support
+
+If you like DedCore, consider giving it a ⭐ on GitHub or buying us a coffee (or a new hard drive):
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/yourusername)
+
+---
+
+*Made with ❤️, 🦀, and way too many duplicate files.*
+
 
 ### Text Similarity Options
 
-- `--similarity-threshold FLOAT`: Minimum similarity threshold (0.0 to 1.0) for grouping text files
+- Minimum similarity threshold (0.0 to 1.0) for grouping text files
   - 1.0 = files must be identical
   - 0.8 = files must be at least 80% similar
   - Lower values will group more files together
@@ -74,31 +183,13 @@ dedcore --filetypes=txt,md,rs --similarity-threshold 0.8 /path/to/files
 
 ### Image Similarity
 
-dedcore supports multiple image hashing algorithms to find similar images:
+### Finding Similar Images
 
-```bash
-# Find similar images with default algorithm (Combined)
-dedcore --image-similarity-threshold 0.9 /path/to/images
-
-# Specify the hashing algorithm to use
-dedcore --image-hash-algorithm avg --image-similarity-threshold 0.85 /path/to/images
-```
-
-#### Image Hashing Algorithms
-
-- `--image-hash-algorithm ALGO`: Choose the image hashing algorithm to use:
-  - `avg`: Average Hash (fastest but less accurate)
-  - `phash`: Perceptual Hash (more accurate but slower)
-  - `dhash`: Difference Hash (good balance of speed and accuracy)
-  - `color`: Color Hash (focuses on color distribution)
-  - `combined`: Uses multiple algorithms for highest accuracy (default)
-
-- `--image-similarity-threshold FLOAT`: Minimum similarity threshold (0.0 to 1.0) for grouping images
-  - 1.0 = images must be nearly identical
-  - 0.9 = images must be at least 90% similar
-  - Lower values will group more images together
-
-- Supported image file extensions: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.tiff`
+DedCore's TUI makes it easy to find similar images:
+1. Select "Scan for Duplicates" from the main menu
+2. Choose the directory containing your images
+3. Adjust the similarity threshold using the intuitive slider
+4. Let DedCore do its magic!
 
 #### How It Works
 

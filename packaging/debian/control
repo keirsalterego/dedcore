@@ -1,0 +1,15 @@
+Source: dedcore
+Section: utils
+Priority: optional
+Maintainer: Your Name <your.email@example.com>
+Build-Depends: debhelper (>= 11), cargo, rustc, libssl-dev, pkg-config
+Standards-Version: 4.5.1
+Homepage: https://github.com/manishyoudumb/dedcore
+
+Package: dedcore
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A high-performance deduplication tool
+ dedcore is an intelligent CLI tool for finding and removing duplicate
+ and similar files. It provides a robust, safe, and feature-rich
+ deduplication experience for power users and professionals.

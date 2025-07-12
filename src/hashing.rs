@@ -6,11 +6,23 @@ use xxhash_rust::xxh3::Xxh3;
 use rayon::prelude::*;
 use memmap2::Mmap;
 
+use std::fmt;
+
 #[derive(Clone, Debug)]
 pub enum HashKind {
     Sha256,
     Blake3,
     XxHash3,
+}
+
+impl fmt::Display for HashKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HashKind::Sha256 => write!(f, "SHA-256"),
+            HashKind::Blake3 => write!(f, "BLAKE3"),
+            HashKind::XxHash3 => write!(f, "XXH3"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -40,18 +52,40 @@ impl HashConfig {
     }
     pub fn choose_algorithm(&self, ext: &str) -> HashKind {
         match (ext.to_lowercase().as_str(), &self.security, &self.speed) {
-            ("jpg" | "jpeg" | "png" | "mp4" | "mp3", _, Speed::Fastest) => HashKind::XxHash3,
             ("txt" | "md" | "rs" | "py", Security::High | Security::Maximum, _) => HashKind::Sha256,
             ("zip" | "tar" | "gz", _, Speed::Balanced) => HashKind::Blake3,
+            ("jpg" | "jpeg" | "png" | "mp4" | "mp3", _, Speed::Fastest) => HashKind::XxHash3,
             (_, Security::Maximum, _) => HashKind::Sha256,
-            (_, Security::High, _) => HashKind::Blake3,
+            (_, Security::High, _) => HashKind::Sha256,
             (_, _, Speed::Fastest) => HashKind::XxHash3,
-            _ => HashKind::Blake3,
+            _ => HashKind::Sha256,
         }
     }
 }
 
 // 8KB buffer. Why? Because it feels right.
+
+/// Compute hash of a byte slice using the specified algorithm
+pub fn hash_bytes(data: &[u8], algo: HashKind) -> Vec<u8> {
+    match algo {
+        HashKind::Sha256 => {
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            hasher.finalize().to_vec()
+        },
+        HashKind::Blake3 => {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(data);
+            hasher.finalize().as_bytes().to_vec()
+        },
+        HashKind::XxHash3 => {
+            let mut hasher = Xxh3::new();
+            hasher.update(data);
+            let result = hasher.digest().to_le_bytes().to_vec();
+            result
+        },
+    }
+}
 
 pub fn hash_file(path: &str, algo: HashKind) -> io::Result<Vec<u8>> {
     let file = File::open(path)?;
@@ -113,6 +147,7 @@ pub fn hash_file(path: &str, algo: HashKind) -> io::Result<Vec<u8>> {
     }
 }
 
+#[allow(dead_code)]
 pub fn hash_files_parallel(paths: &[&str], algo: HashKind) -> Vec<(String, Vec<u8>)> {
     paths.par_iter()
         .map(|path| {

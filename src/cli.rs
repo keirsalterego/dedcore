@@ -13,9 +13,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use rayon::prelude::*;
 use walkdir;
-// manish is dumb 
+
 #[derive(Subcommand, Debug)]
 pub enum AppCmd {
     #[command(subcommand)]
@@ -248,6 +250,97 @@ fn collect_files_recursively_with_filter<P: AsRef<Path>>(
         .collect()
 }
 
+/// Collects files recursively in parallel using Rayon for improved performance.
+/// This function provides the same filtering capabilities as `collect_files_recursively_with_filter`
+/// but processes directories in parallel.
+fn collect_files_recursively_parallel<P: AsRef<Path> + Send + Sync>(
+    root: P,
+    exts: Option<&Vec<String>>,
+    min_size: Option<u64>,
+    max_size: Option<u64>,
+    min_age: Option<u64>,
+    max_age: Option<u64>,
+    regex_filter: Option<&Regex>,
+) -> Vec<String> {
+    use walkdir::WalkDir;
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    // Convert filter options to Arc for thread-safe sharing
+    let exts = exts.map(|v| Arc::new(v.clone()));
+    let regex_filter = regex_filter.map(|r| Arc::new(r.clone()));
+    
+    // Create a channel for collecting results
+    let (tx, rx) = std::sync::mpsc::channel();
+    
+    // Walk the directory in parallel
+    WalkDir::new(root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_dir() || e.file_type().is_file())
+        .par_bridge()
+        .for_each_with(tx, |sender, entry| {
+            if entry.file_type().is_file() {
+                let meta = match entry.metadata() {
+                    Ok(m) => m,
+                    Err(_) => return,
+                };
+                
+                // Check file size
+                let len = meta.len();
+                if let Some(min) = min_size {
+                    if len < min { return; }
+                }
+                if let Some(max) = max_size {
+                    if len > max { return; }
+                }
+                
+                // Check file age
+                if min_age.is_some() || max_age.is_some() {
+                    if let Ok(modified) = meta.modified() {
+                        if let Ok(modified_secs) = modified.duration_since(UNIX_EPOCH) {
+                            let age_secs = now.saturating_sub(modified_secs.as_secs());
+                            let age_days = age_secs / 86400;
+                            
+                            if let Some(min) = min_age {
+                                if age_days < min { return; }
+                            }
+                            if let Some(max) = max_age {
+                                if age_days > max { return; }
+                            }
+                        }
+                    }
+                }
+                
+                // Check regex filter
+                let path_str = entry.path().to_string_lossy();
+                if let Some(ref re) = regex_filter {
+                    if !re.is_match(&path_str) { return; }
+                }
+                
+                // Check file extension
+                if let Some(exts) = &exts {
+                    if let Some(ext) = entry.path().extension().and_then(|s| s.to_str()) {
+                        if !exts.iter().any(|x| x.eq_ignore_ascii_case(ext)) {
+                            return;
+                        }
+                    } else if !exts.is_empty() {
+                        return;
+                    }
+                }
+                
+                // If we get here, the file passes all filters
+                let _ = sender.send(entry.path().to_string_lossy().to_string());
+            }
+        });
+    
+    // Collect all results
+    rx.into_iter().collect()
+}
+
 pub fn run_with_args<I, T>(args: I)
 where
     I: IntoIterator<Item = T>,
@@ -323,7 +416,7 @@ where
     let scan_target;
     if app.targets.len() == 1 && Path::new(&app.targets[0]).is_dir() {
         scan_target = format!("directory: {}", app.targets[0]);
-        files = collect_files_recursively_with_filter(
+        files = collect_files_recursively_parallel(
             &app.targets[0],
             filetypes.as_ref(),
             min_size,
@@ -341,7 +434,7 @@ where
             if Path::new(f).is_file() {
                 files.push(f.clone());
             } else if Path::new(f).is_dir() {
-                let mut dir_files = collect_files_recursively_with_filter(
+                let mut dir_files = collect_files_recursively_parallel(
                     f,
                     filetypes.as_ref(),
                     min_size,
@@ -580,12 +673,12 @@ where
             }
         };
 
-        let mut quarantined_count = 0;
+        let mut _quarantined_count = 0;
         for (file_path, _) in &results {
             if let Err(e) = quarantine.quarantine_file(file_path) {
                 eprintln!("Failed to quarantine {}: {}", file_path, e);
             } else {
-                quarantined_count += 1;
+                _quarantined_count += 1;
             }
         }
 
@@ -644,7 +737,7 @@ where
             ));
         }
         html.push_str("</table></body></html>");
-        if let Err(e) = fs::write(hpath, html) {
+        if let Err(_e) = fs::write(hpath, html) {
             eprintln!("Failed to write HTML report: {}", hpath);
         } else {
             println!("HTML report written to {}", hpath);
@@ -976,7 +1069,7 @@ where
         })
         .collect();
     if let Some(ref jpath) = app.json_report {
-        let mut report_json = serde_json::to_value(&report).unwrap_or(serde_json::json!([]));
+        let report_json = serde_json::to_value(&report).unwrap_or(serde_json::json!([]));
         let mut obj = serde_json::Map::new();
         obj.insert("file_hash_report".to_string(), report_json);
         obj.insert(
@@ -1025,7 +1118,7 @@ where
             }
         }
         html.push_str("</body></html>");
-        if let Err(e) = fs::write(hpath, html) {
+        if let Err(_e) = fs::write(hpath, html) {
             eprintln!("Failed to write HTML report: {}", hpath);
         } else {
             println!("HTML report written to {}", hpath);
@@ -1151,13 +1244,15 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn run() {
-    run_with_args(std::env::args());
+    let args: Vec<String> = std::env::args().collect();
+    run_with_args(args.iter());
 }
 
+#[allow(dead_code)]
 pub fn run_with_ui(path: String, security: String, speed: String) {
     use crate::hashing::{HashConfig, Security, Speed};
-    use regex::Regex;
     use std::path::Path;
     let security = match security.to_lowercase().as_str() {
         "low" => Security::Low,
