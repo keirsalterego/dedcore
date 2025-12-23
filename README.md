@@ -5,7 +5,7 @@
       ██╔══██╗██╔════╝██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
       ██║  ██║█████╗  ██║  ██║██║     ██║   ██║██████╔╝█████╗  
       ██║  ██║██╔══╝  ██║  ██║██║     ██║   ██║██╔══██╗██╔══╝  
-        ██████╔╝███████╗██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗ v 0.1.0
+               ██████╔╝███████╗██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗ v 0.1.0
               DEDCORE
 ```
 
@@ -14,17 +14,11 @@
 
 > *"I'm not saying you have a hoarding problem, but your hard drive called..."*
 
-[![Crates.io](https://img.shields.io/crates/v/dedcore?style=for-the-badge&logo=rust&color=orange)](https://crates.io/crates/dedcore)
-[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen?style=for-the-badge&logo=read-the-docs)](https://docs.rs/dedcore/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/manishyoudumb/dedcore/rust.yml?branch=main&style=for-the-badge&logo=github-actions)](https://github.com/manishyoudumb/dedcore/actions)
-[![codecov](https://img.shields.io/codecov/c/github/manishyoudumb/dedcore?style=for-the-badge&logo=codecov&token=YOUR_TOKEN_HERE)](https://codecov.io/gh/manishyoudumb/dedcore)
-[![Dependency Status](https://deps.rs/repo/github/manishyoudumb/dedcore/status.svg?style=for-the-badge)](https://deps.rs/repo/github/manishyoudumb/dedcore)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
-[![Platforms](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/manishyoudumb/dedcore)
+[![Platforms](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/keirsalterego/dedcore)
 [![Downloads](https://img.shields.io/crates/d/dedcore?style=for-the-badge&logo=rust)](https://crates.io/crates/dedcore)
-[![Discord](https://img.shields.io/discord/your-discord-server?style=for-the-badge&logo=discord&color=7289DA)](https://discord.gg/your-invite-link)
-[![Twitter Follow](https://img.shields.io/twitter/follow/your-twitter?style=for-the-badge&logo=twitter&color=1DA1F2)](https://twitter.com/your-twitter)
+[![Twitter Follow](https://img.shields.io/twitter/follow/keirsalterego?style=for-the-badge&logo=twitter&color=1DA1F2)](https://twitter.com/keirsalterego)
 
 </div>
 
@@ -157,9 +151,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 💖 Support
 
-If you like DedCore, consider giving it a ⭐ on GitHub or buying us a coffee (or a new hard drive):
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/yourusername)
+If you like DedCore, consider giving it a ⭐ on GitHub (or a new hard drive):
 
 ---
 
