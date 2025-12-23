@@ -1,11 +1,13 @@
 [package]
 name = "dedcore"
 version = "0.1.0"
-edition = "2024"
-authors = ["Your Name <your.email@example.com>"]
+edition = "2021"
+authors = ["keirsalterego"]
 description = "A high-performance deduplication tool"
 license = "MIT"
-repository = "https://github.com/manishyoudumb/dedcore"
+repository = "https://github.com/keirsalterego/dedcore"
+keywords = ["deduplication", "duplicate", "files", "hash", "similarity", "cleanup", "storage"]
+categories = ["command-line-utilities", "filesystem", "development-tools"]
 
 [lib]
 name = "dedcore"
