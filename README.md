@@ -17,8 +17,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/keirsalterego/dedcore)
-[![Downloads](https://img.shields.io/crates/d/dedcore?style=for-the-badge&logo=rust)](https://crates.io/crates/dedcore)
-[![Twitter Follow](https://img.shields.io/twitter/follow/keirsalterego?style=for-the-badge&logo=twitter&color=1DA1F2)](https://twitter.com/keirsalterego)
+[![Crates.io](https://img.shields.io/badge/Crates.io-Available-orange?style=for-the-badge&logo=rust)](https://crates.io/crates/dedcore)[![Twitter Follow](https://img.shields.io/twitter/follow/keirsalterego?style=for-the-badge&logo=twitter&color=1DA1F2)](https://twitter.com/keirsalterego)
 
 </div>
 
